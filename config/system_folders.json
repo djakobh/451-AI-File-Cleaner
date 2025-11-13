@@ -1,0 +1,21 @@
+{
+  "protected_folders": [
+    "Windows",
+    "System32",
+    "SysWOW64",
+    "Program Files",
+    "Program Files (x86)",
+    "ProgramData",
+    "Boot",
+    "Recovery",
+    "$Recycle.Bin",
+    "System Volume Information"
+  ],
+  "protected_patterns": [
+    "AppData\\Local\\Microsoft",
+    "AppData\\Roaming\\Microsoft",
+    "WindowsApps",
+    "WinSxS"
+  ],
+  "description": "These folders are automatically protected from scanning and deletion to ensure system stability"
+}

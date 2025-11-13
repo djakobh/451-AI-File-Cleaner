@@ -1,0 +1,29 @@
+{
+  "version": "1.0.0",
+  "scan_settings": {
+    "max_files": 5000,
+    "max_depth": 20,
+    "skip_hidden": true,
+    "skip_system": true
+  },
+  "ml_settings": {
+    "model_type": "random_forest",
+    "retrain_on_startup": false,
+    "min_confidence": 0.7
+  },
+  "ui_settings": {
+    "theme": "light",
+    "window_width": 1200,
+    "window_height": 800,
+    "auto_select_recommended": false
+  },
+  "safety_settings": {
+    "simulation_mode": true,
+    "require_confirmation": true,
+    "use_recycle_bin": true
+  },
+  "performance": {
+    "max_memory_mb": 1024,
+    "thread_count": 4
+  }
+}
