@@ -1,5 +1,6 @@
 """
 Main application window with side-by-side results and live metrics dashboard
+UPDATED: Added Type column to show file extensions
 """
 
 import tkinter as tk
@@ -135,21 +136,23 @@ class FilePurgeApp:
         self._create_tree(keep_frame, 'keep')
     
     def _create_tree(self, parent, tree_type):
-        """Create a treeview for delete or keep files"""
+        """Create a treeview for delete or keep files - WITH TYPE COLUMN"""
         tree_frame = ttk.Frame(parent)
         tree_frame.pack(fill='both', expand=True)
         
-        columns = ('File', 'Size', 'Access', 'Confidence')
+        columns = ('File', 'Type', 'Size', 'Access', 'Confidence')
         tree = ttk.Treeview(tree_frame, columns=columns, show='tree headings', height=20)
         
         tree.heading('#0', text='☐')
         tree.heading('File', text='File Path')
+        tree.heading('Type', text='Type')
         tree.heading('Size', text='Size (MB)')
         tree.heading('Access', text='Days Unaccessed')
         tree.heading('Confidence', text='Confidence')
         
         tree.column('#0', width=40)
-        tree.column('File', width=300)
+        tree.column('File', width=260)
+        tree.column('Type', width=70)
         tree.column('Size', width=80)
         tree.column('Access', width=100)
         tree.column('Confidence', width=80)
@@ -425,7 +428,7 @@ class FilePurgeApp:
         self.progress_var.set("Scan complete")
     
     def display_results(self):
-        """Display scan results in side-by-side trees"""
+        """Display scan results in side-by-side trees - WITH TYPE COLUMN"""
         # Clear trees
         for item in self.delete_tree.get_children():
             self.delete_tree.delete(item)
@@ -439,10 +442,19 @@ class FilePurgeApp:
         delete_files.sort(key=lambda x: x.get('confidence', 0), reverse=True)
         keep_files.sort(key=lambda x: x.get('confidence', 0), reverse=True)
         
-        # Populate delete tree (red background)
+        # Populate delete tree (red background) - WITH TYPE
         for i, file_data in enumerate(delete_files[:1000]):
+            ext = file_data.get('extension', '')
+            # Show category in parentheses if different from extension
+            category = file_data.get('category', '')
+            if category and category != 'other':
+                type_display = f".{ext}"
+            else:
+                type_display = f"" if ext else "N/A"
+            
             values = (
                 file_data.get('path', ''),
+                type_display,
                 f"{file_data.get('size_mb', 0):.2f}",
                 f"{file_data.get('accessed_days_ago', 0):.0f}",
                 f"{file_data.get('confidence', 0):.1%}"
@@ -452,10 +464,18 @@ class FilePurgeApp:
         
         self.delete_tree.tag_configure('delete', background=COLORS['delete_bg'])
         
-        # Populate keep tree (green background)
+        # Populate keep tree (green background) - WITH TYPE
         for i, file_data in enumerate(keep_files[:1000]):
+            ext = file_data.get('extension', '')
+            category = file_data.get('category', '')
+            if category and category != 'other':
+                type_display = f".{ext}"
+            else:
+                type_display = f"" if ext else "N/A"
+            
             values = (
                 file_data.get('path', ''),
+                type_display,
                 f"{file_data.get('size_mb', 0):.2f}",
                 f"{file_data.get('accessed_days_ago', 0):.0f}",
                 f"{file_data.get('confidence', 0):.1%}"
