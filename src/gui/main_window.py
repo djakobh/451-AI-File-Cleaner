@@ -1,6 +1,6 @@
 """
 Main application window with side-by-side results and live metrics dashboard
-UPDATED: Added Type column to show file extensions
+UPDATED: Added Type column to show file extensions + SORTABLE columns
 """
 
 import tkinter as tk
@@ -39,6 +39,16 @@ class FilePurgeApp:
         self.scan_results = []
         self.recommendations = []
         self.selected_indices = {'delete': set(), 'keep': set()}
+        
+        # Sorting state
+        self.delete_sort_column = None
+        self.delete_sort_reverse = False
+        self.keep_sort_column = None
+        self.keep_sort_reverse = False
+        
+        # Filtered/sorted data
+        self.delete_files = []
+        self.keep_files = []
         
         # Setup UI
         self.setup_ui()
@@ -136,7 +146,7 @@ class FilePurgeApp:
         self._create_tree(keep_frame, 'keep')
     
     def _create_tree(self, parent, tree_type):
-        """Create a treeview for delete or keep files - WITH TYPE COLUMN"""
+        """Create a treeview for delete or keep files - WITH SORTABLE COLUMNS"""
         tree_frame = ttk.Frame(parent)
         tree_frame.pack(fill='both', expand=True)
         
@@ -144,11 +154,11 @@ class FilePurgeApp:
         tree = ttk.Treeview(tree_frame, columns=columns, show='tree headings', height=20)
         
         tree.heading('#0', text='☐')
-        tree.heading('File', text='File Path')
-        tree.heading('Type', text='Type')
-        tree.heading('Size', text='Size (MB)')
-        tree.heading('Access', text='Days Unaccessed')
-        tree.heading('Confidence', text='Confidence')
+        tree.heading('File', text='File Path', command=lambda: self.sort_tree(tree_type, 'File'))
+        tree.heading('Type', text='Type', command=lambda: self.sort_tree(tree_type, 'Type'))
+        tree.heading('Size', text='Size (MB) ⇅', command=lambda: self.sort_tree(tree_type, 'Size'))
+        tree.heading('Access', text='Days Unaccessed ⇅', command=lambda: self.sort_tree(tree_type, 'Access'))
+        tree.heading('Confidence', text='Confidence', command=lambda: self.sort_tree(tree_type, 'Confidence'))
         
         tree.column('#0', width=40)
         tree.column('File', width=260)
@@ -177,6 +187,83 @@ class FilePurgeApp:
             self.delete_tree = tree
         else:
             self.keep_tree = tree
+    
+    def sort_tree(self, tree_type, column):
+        """Sort tree by column (ascending/descending toggle)"""
+        tree = self.delete_tree if tree_type == 'delete' else self.keep_tree
+        files = self.delete_files if tree_type == 'delete' else self.keep_files
+        
+        # Toggle sort direction
+        if tree_type == 'delete':
+            if self.delete_sort_column == column:
+                self.delete_sort_reverse = not self.delete_sort_reverse
+            else:
+                self.delete_sort_column = column
+                self.delete_sort_reverse = False
+            reverse = self.delete_sort_reverse
+        else:
+            if self.keep_sort_column == column:
+                self.keep_sort_reverse = not self.keep_sort_reverse
+            else:
+                self.keep_sort_column = column
+                self.keep_sort_reverse = False
+            reverse = self.keep_sort_reverse
+        
+        # Sort data
+        if column == 'File':
+            files.sort(key=lambda x: x.get('path', '').lower(), reverse=reverse)
+        elif column == 'Type':
+            files.sort(key=lambda x: x.get('extension', '').lower(), reverse=reverse)
+        elif column == 'Size':
+            files.sort(key=lambda x: x.get('size_mb', 0), reverse=reverse)
+        elif column == 'Access':
+            files.sort(key=lambda x: x.get('accessed_days_ago', 0), reverse=reverse)
+        elif column == 'Confidence':
+            files.sort(key=lambda x: x.get('confidence', 0), reverse=reverse)
+        
+        # Update heading to show sort direction
+        direction = '▼' if reverse else '▲'
+        tree.heading('File', text='File Path' + (' ' + direction if column == 'File' else ''))
+        tree.heading('Type', text='Type' + (' ' + direction if column == 'Type' else ''))
+        tree.heading('Size', text=f'Size (MB) {direction if column == "Size" else "⇅"}')
+        tree.heading('Access', text=f'Days Unaccessed {direction if column == "Access" else "⇅"}')
+        tree.heading('Confidence', text='Confidence' + (' ' + direction if column == 'Confidence' else ''))
+        
+        # Re-populate tree
+        self._populate_tree(tree, files, tree_type)
+    
+    def _populate_tree(self, tree, files, tree_type):
+        """Populate tree with files"""
+        # Clear tree
+        for item in tree.get_children():
+            tree.delete(item)
+        
+        # Add files
+        for i, file_data in enumerate(files[:1000]):
+            ext = file_data.get('extension', '')
+            category = file_data.get('category', '')
+            if category and category != 'other':
+                type_display = f".{ext}"
+            else:
+                type_display = f"" if ext else "N/A"
+            
+            values = (
+                file_data.get('path', ''),
+                type_display,
+                f"{file_data.get('size_mb', 0):.2f}",
+                f"{file_data.get('accessed_days_ago', 0):.0f}",
+                f"{file_data.get('confidence', 0):.1%}"
+            )
+            
+            # Check if this file was selected
+            is_selected = i in self.selected_indices[tree_type]
+            checkbox = '☑' if is_selected else '☐'
+            
+            tree.insert('', 'end', text=checkbox, values=values, 
+                       tags=(tree_type, str(i)))
+        
+        tree.tag_configure('delete', background=COLORS['delete_bg'])
+        tree.tag_configure('keep', background=COLORS['keep_bg'])
     
     def _setup_metrics_dashboard(self, parent):
         """Setup live metrics dashboard"""
@@ -340,9 +427,13 @@ class FilePurgeApp:
         help_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="Help", menu=help_menu)
         help_menu.add_command(label="About", command=self.show_about)
-        help_menu.add_command(label="View Metrics Dashboard →", 
-                             command=lambda: messagebox.showinfo("Metrics", 
-                                 "The metrics dashboard is on the right side of the window!"))
+        help_menu.add_command(label="Sorting Help", 
+                             command=lambda: messagebox.showinfo("Sorting", 
+                                 "Click column headers to sort:\n\n"
+                                 "• Size (MB) ⇅ - Click to sort by file size\n"
+                                 "• Days Unaccessed ⇅ - Click to sort by age\n"
+                                 "• ▲ = Ascending  ▼ = Descending\n\n"
+                                 "Click again to reverse sort order!"))
     
     def browse_directory(self):
         """Browse for directory"""
@@ -428,75 +519,37 @@ class FilePurgeApp:
         self.progress_var.set("Scan complete")
     
     def display_results(self):
-        """Display scan results in side-by-side trees - WITH TYPE COLUMN"""
-        # Clear trees
-        for item in self.delete_tree.get_children():
-            self.delete_tree.delete(item)
-        for item in self.keep_tree.get_children():
-            self.keep_tree.delete(item)
+        """Display scan results in side-by-side trees"""
+        # Separate and store files
+        self.delete_files = [f for f in self.scan_results if f.get('recommend_delete')]
+        self.keep_files = [f for f in self.scan_results if not f.get('recommend_delete')]
         
-        # Separate and sort results
-        delete_files = [f for f in self.scan_results if f.get('recommend_delete')]
-        keep_files = [f for f in self.scan_results if not f.get('recommend_delete')]
+        # Sort by confidence (default)
+        self.delete_files.sort(key=lambda x: x.get('confidence', 0), reverse=True)
+        self.keep_files.sort(key=lambda x: x.get('confidence', 0), reverse=True)
         
-        delete_files.sort(key=lambda x: x.get('confidence', 0), reverse=True)
-        keep_files.sort(key=lambda x: x.get('confidence', 0), reverse=True)
+        # Reset sort state
+        self.delete_sort_column = None
+        self.delete_sort_reverse = False
+        self.keep_sort_column = None
+        self.keep_sort_reverse = False
         
-        # Populate delete tree (red background) - WITH TYPE
-        for i, file_data in enumerate(delete_files[:1000]):
-            ext = file_data.get('extension', '')
-            # Show category in parentheses if different from extension
-            category = file_data.get('category', '')
-            if category and category != 'other':
-                type_display = f".{ext}"
-            else:
-                type_display = f"" if ext else "N/A"
-            
-            values = (
-                file_data.get('path', ''),
-                type_display,
-                f"{file_data.get('size_mb', 0):.2f}",
-                f"{file_data.get('accessed_days_ago', 0):.0f}",
-                f"{file_data.get('confidence', 0):.1%}"
-            )
-            self.delete_tree.insert('', 'end', text='☐', values=values, 
-                                   tags=('delete', str(i)))
-        
-        self.delete_tree.tag_configure('delete', background=COLORS['delete_bg'])
-        
-        # Populate keep tree (green background) - WITH TYPE
-        for i, file_data in enumerate(keep_files[:1000]):
-            ext = file_data.get('extension', '')
-            category = file_data.get('category', '')
-            if category and category != 'other':
-                type_display = f".{ext}"
-            else:
-                type_display = f"" if ext else "N/A"
-            
-            values = (
-                file_data.get('path', ''),
-                type_display,
-                f"{file_data.get('size_mb', 0):.2f}",
-                f"{file_data.get('accessed_days_ago', 0):.0f}",
-                f"{file_data.get('confidence', 0):.1%}"
-            )
-            self.keep_tree.insert('', 'end', text='☐', values=values, 
-                                 tags=('keep', str(i)))
-        
-        self.keep_tree.tag_configure('keep', background=COLORS['keep_bg'])
+        # Populate trees
+        self._populate_tree(self.delete_tree, self.delete_files, 'delete')
+        self._populate_tree(self.keep_tree, self.keep_files, 'keep')
         
         # Update metrics dashboard
         metrics = self._calculate_metrics()
         self._update_metrics_display(metrics)
         
         # Update status bar
-        delete_count = len(delete_files)
-        total_size = sum(f.get('size_mb', 0) for f in delete_files)
+        delete_count = len(self.delete_files)
+        total_size = sum(f.get('size_mb', 0) for f in self.delete_files)
         
         self.status_var.set(
             f"Found {len(self.scan_results)} files | "
             f"DELETE: {delete_count} ({total_size:.1f} MB) | "
-            f"KEEP: {len(keep_files)}"
+            f"KEEP: {len(self.keep_files)}"
         )
     
     def _calculate_metrics(self):
@@ -593,16 +646,13 @@ class FilePurgeApp:
             return
         
         # Record feedback
-        delete_files = [f for f in self.scan_results if f.get('recommend_delete')]
-        keep_files = [f for f in self.scan_results if not f.get('recommend_delete')]
-        
         for idx in self.selected_indices['delete']:
-            if idx < len(delete_files):
-                self.recommender.record_choice(delete_files[idx], user_kept=False)
+            if idx < len(self.delete_files):
+                self.recommender.record_choice(self.delete_files[idx], user_kept=False)
         
         for idx in self.selected_indices['keep']:
-            if idx < len(keep_files):
-                self.recommender.record_choice(keep_files[idx], user_kept=False)
+            if idx < len(self.keep_files):
+                self.recommender.record_choice(self.keep_files[idx], user_kept=False)
         
         # Remove from trees
         items_to_remove = []
@@ -651,7 +701,8 @@ class FilePurgeApp:
             "Intelligent file management using:\n"
             "• Machine Learning Classification\n"
             "• Anomaly Detection\n"
-            "• Personalized Recommendations"
+            "• Personalized Recommendations\n\n"
+            "💡 Click column headers to sort!"
         )
     
     def run(self):

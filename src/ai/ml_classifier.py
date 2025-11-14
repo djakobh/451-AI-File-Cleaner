@@ -1,5 +1,5 @@
 """
-Machine Learning classifier for file importance prediction - BALANCED VERSION
+Machine Learning classifier for file importance prediction - FIXED BALANCED VERSION
 """
 
 import numpy as np
@@ -31,7 +31,7 @@ class MLClassifier:
     
     def generate_synthetic_data(self, n_samples: int = None) -> Tuple[List[Dict], np.ndarray]:
         """
-        Generate synthetic training data - BALANCED for 40-60% deletion
+        Generate synthetic training data - FIXED BALANCED for 40-60% deletion
         
         Args:
             n_samples: Number of samples to generate
@@ -50,14 +50,21 @@ class MLClassifier:
         
         for i in range(n_samples):
             # Generate realistic file characteristics
+            # FIXED: Even MORE aggressive - 70% old files, 30% recent
             size_mb = np.random.lognormal(0, 2)
-            created_days = np.random.uniform(1, 1000)
-            accessed_days = np.random.uniform(0, created_days)
+            created_days = np.random.uniform(150, 1500)  # Older files (was 100-1200)
+            
+            # FIXED: 70% chance of being OLD (>180 days), 30% chance of being recent
+            if np.random.random() < 0.70:  # 70% old files (was 60%)
+                accessed_days = np.random.uniform(200, created_days)  # Old (was 180)
+            else:  # 30% recent files (was 40%)
+                accessed_days = np.random.uniform(0, 150)  # Recent
+            
             modified_days = np.random.uniform(accessed_days, created_days)
             
-            # Random file type (30% disposable is realistic)
-            is_disposable = np.random.choice([True, False], p=[0.3, 0.7])
-            is_hidden = np.random.choice([True, False], p=[0.08, 0.92])
+            # FIXED: Increase disposable files from 40% to 45%
+            is_disposable = np.random.choice([True, False], p=[0.45, 0.55])
+            is_hidden = np.random.choice([True, False], p=[0.10, 0.90])  # More hidden files
             
             depth = int(np.random.exponential(3) + 2)
             
@@ -69,7 +76,7 @@ class MLClassifier:
             
             # KEEP signals (reduced bonuses)
             if accessed_days < 60:  # Used in last 2 months
-                keep_score += 2  # Reduced from 3
+                keep_score += 2
             
             if accessed_days < 180:  # Used in last 6 months
                 keep_score += 1
@@ -78,10 +85,10 @@ class MLClassifier:
             if is_disposable:
                 delete_score += 2
             
-            if accessed_days > 270:  # Not used in 9 months (was 1 year)
+            if accessed_days > 270:  # Not used in 9 months
                 delete_score += 3
             
-            if accessed_days > 540:  # Not used in 18 months (was 2 years)
+            if accessed_days > 540:  # Not used in 18 months
                 delete_score += 2  # Extra penalty
             
             if size_mb > 150 and accessed_days > 180:  # Large (150MB+) and 6 months old
@@ -98,7 +105,7 @@ class MLClassifier:
             
             # Lower threshold for more deletions
             net_score = delete_score - keep_score
-            if net_score >= 3:  # Lower from 4 to 3
+            if net_score >= 2:  # Lowered from 3 to 2 for more deletions
                 label = 0  # DELETE
             else:
                 label = 1  # KEEP
@@ -128,13 +135,13 @@ class MLClassifier:
             synthetic_data.append(file_metadata)
             labels.append(label)
         
-        # Fine-tune the balance to hit 55% KEEP / 45% DELETE
+        # Fine-tune the balance to hit 50% KEEP / 50% DELETE
         labels = np.array(labels)
         delete_count = np.sum(labels == 0)
         keep_count = np.sum(labels == 1)
         
         current_delete_ratio = delete_count / len(labels)
-        target_delete_ratio = 0.45
+        target_delete_ratio = 0.50
         
         logger.info(f"Initial distribution: {keep_count} KEEP ({keep_count/len(labels)*100:.1f}%), "
                    f"{delete_count} DELETE ({delete_count/len(labels)*100:.1f}%)")
@@ -147,7 +154,7 @@ class MLClassifier:
             for i in range(n_extra_deletes):
                 # Create clearly deletable files
                 size_mb = np.random.lognormal(1, 2)  # Larger files
-                accessed_days = np.random.uniform(400, 1500)  # Old
+                accessed_days = np.random.uniform(200, 1500)  # Old (reduced from 250)
                 modified_days = accessed_days + np.random.uniform(0, 200)
                 created_days = modified_days + np.random.uniform(0, 200)
                 
