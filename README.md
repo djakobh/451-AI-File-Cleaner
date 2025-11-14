@@ -4,11 +4,11 @@
 An intelligent file management system using machine learning to identify unnecessary files and help you reclaim storage space safely.
 
 ## Features
-- 🤖 **ML Classification** - Random Forest algorithm (87% accuracy)
-- 🔍 **Anomaly Detection** - Identifies unusual/forgotten files
-- 📈 **Learning System** - Adapts to your preferences over time
-- 🛡️ **Safety First** - System folder protection + simulation mode
-- 🔒 **Privacy** - Never accesses file content, only metadata
+-  **ML Classification** - Random Forest algorithm (87% accuracy)
+-  **Anomaly Detection** - Identifies unusual/forgotten files
+-  **Learning System** - Adapts to your preferences over time
+-  **Safety First** - System folder protection + simulation mode
+-  **Privacy** - Never accesses file content, only metadata
 
 ## Quick Start
 
