@@ -23,7 +23,7 @@ CONFIG_DIR = BASE_DIR / "config"
 for dir_path in [DATA_DIR, MODELS_DIR, FEEDBACK_DIR, LOGS_DIR, CONFIG_DIR]:
     dir_path.mkdir(parents=True, exist_ok=True)
 
-# System Protection
+# System Protection - FIXED: Added Adobe and application folders
 SYSTEM_FOLDERS = {
     'Windows',
     'System32',
@@ -37,12 +37,31 @@ SYSTEM_FOLDERS = {
     'System Volume Information',
     'WindowsApps',
     'WinSxS',
+    # Application folders (even if in Downloads)
+    'Adobe',
+    'Adobe Premiere Pro',
+    'Adobe After Effects',
+    'Adobe Photoshop',
+    'node_modules',
+    'Python',
+    '.venv',
+    'venv',
 }
 
 SYSTEM_PATHS_PARTIAL = {
     'AppData\\Local\\Temp',
     'AppData\\Local\\Microsoft',
     'AppData\\Roaming\\Microsoft',
+}
+
+# Application-specific path patterns (for plugins, extensions, etc.)
+APPLICATION_PATHS = {
+    'Plug-Ins',
+    'Plugins',
+    'Extensions',
+    'Add-ons',
+    'Addons',
+    'Common Files',
 }
 
 # File Extensions
@@ -86,6 +105,42 @@ ARCHIVE_EXTENSIONS = {
 
 EXECUTABLE_EXTENSIONS = {
     'exe', 'msi', 'bat', 'cmd', 'com', 'scr', 'dll', 'sys',
+}
+
+# FIXED: Added specialized file extensions
+# Adobe Creative Suite extensions
+ADOBE_EXTENSIONS = {
+    'aex',     # After Effects plugin
+    'epr',     # Premiere preset
+    'prproj',  # Premiere project
+    'aep',     # After Effects project
+    'psb',     # Photoshop large document
+    'ffx',     # Final Cut effect
+    'mogrt',   # Motion graphics template
+    'plb',     # Premiere library
+    'zdct',    # Adobe preset
+}
+
+# Development/Code extensions
+DEVELOPMENT_EXTENSIONS = {
+    'py', 'pyc', 'pyo',
+    'js', 'jsx', 'ts', 'tsx',
+    'cpp', 'c', 'h', 'hpp',
+    'java', 'class', 'jar',
+    'cs', 'csproj', 'sln',
+    'go', 'rs', 'rb', 'php',
+    'json', 'xml', 'yaml', 'yml', 'toml',
+    'md', 'rst',
+    'css', 'scss', 'sass', 'less',
+    'html', 'htm', 'vue',
+    'sql', 'db', 'sqlite',
+}
+
+# Configuration/Settings files
+CONFIG_EXTENSIONS = {
+    'ini', 'cfg', 'conf', 'config',
+    'properties', 'settings',
+    'env', 'gitignore', 'dockerignore',
 }
 
 # Scanning Settings
@@ -174,7 +229,7 @@ SAFETY_CONFIG = {
     'exclude_recent_days': 7,  # Don't recommend files accessed in last week
 }
 
-# File Categories for Analysis
+# File Categories for Analysis - FIXED: Added new categories
 FILE_CATEGORIES = {
     'documents': DOCUMENT_EXTENSIONS,
     'images': IMAGE_EXTENSIONS,
@@ -183,6 +238,9 @@ FILE_CATEGORIES = {
     'archives': ARCHIVE_EXTENSIONS,
     'executables': EXECUTABLE_EXTENSIONS,
     'disposable': DISPOSABLE_EXTENSIONS,
+    'adobe': ADOBE_EXTENSIONS,
+    'development': DEVELOPMENT_EXTENSIONS,
+    'config': CONFIG_EXTENSIONS,
 }
 
 def get_file_category(extension: str) -> str:
@@ -196,7 +254,7 @@ def get_file_category(extension: str) -> str:
     return 'other'
 
 def is_system_protected(filepath: str) -> bool:
-    """Check if a file path is in a protected system location"""
+    """Check if a file path is in a protected system location - FIXED"""
     path_upper = filepath.upper()
     
     # Check full folder names
@@ -207,6 +265,11 @@ def is_system_protected(filepath: str) -> bool:
     # Check partial paths
     for partial in SYSTEM_PATHS_PARTIAL:
         if partial.upper() in path_upper:
+            return True
+    
+    # FIXED: Check for application-specific folders (plugins, etc.)
+    for app_path in APPLICATION_PATHS:
+        if app_path.upper() in path_upper:
             return True
     
     return False

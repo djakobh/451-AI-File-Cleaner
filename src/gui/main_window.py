@@ -1,5 +1,5 @@
 """
-Main application window and orchestration
+Main application window with side-by-side results and live metrics dashboard
 """
 
 import tkinter as tk
@@ -20,12 +20,12 @@ logger = logging.getLogger(__name__)
 
 
 class FilePurgeApp:
-    """Main application class"""
+    """Main application class with live metrics dashboard"""
     
     def __init__(self):
         self.root = tk.Tk()
         self.root.title(f"{APP_NAME} v{APP_VERSION} - {TEAM_NAME}")
-        self.root.geometry(f"{UI_CONFIG['window_width']}x{UI_CONFIG['window_height']}")
+        self.root.geometry("1600x900")  # Wider for side-by-side view
         
         # Initialize components
         self.analyzer = FileAnalyzer()
@@ -37,7 +37,7 @@ class FilePurgeApp:
         # Data storage
         self.scan_results = []
         self.recommendations = []
-        self.selected_indices = set()
+        self.selected_indices = {'delete': set(), 'keep': set()}
         
         # Setup UI
         self.setup_ui()
@@ -47,42 +47,54 @@ class FilePurgeApp:
     def setup_ui(self):
         """Setup the user interface"""
         
-        # === Header ===
+        # Header
         header_frame = ttk.Frame(self.root, padding=10)
         header_frame.pack(fill='x')
         
-        title_label = ttk.Label(
-            header_frame,
-            text=APP_NAME,
-            font=(UI_CONFIG['font_family'], UI_CONFIG['title_font_size'], 'bold')
-        )
-        title_label.pack()
+        ttk.Label(header_frame, text=APP_NAME, 
+                 font=(UI_CONFIG['font_family'], UI_CONFIG['title_font_size'], 'bold')).pack()
+        ttk.Label(header_frame, text="Intelligent file management using Machine Learning",
+                 font=(UI_CONFIG['font_family'], 10)).pack()
         
-        subtitle_label = ttk.Label(
-            header_frame,
-            text="Intelligent file management using Machine Learning",
-            font=(UI_CONFIG['font_family'], 10)
-        )
-        subtitle_label.pack()
+        # Control Panel
+        self._setup_controls()
         
-        # === Control Panel ===
+        # Progress
+        self._setup_progress()
+        
+        # Main content area - Split into results and metrics
+        main_container = ttk.Frame(self.root)
+        main_container.pack(fill='both', expand=True, padx=10, pady=5)
+        
+        # Left side: Results (70% width)
+        results_container = ttk.Frame(main_container)
+        results_container.pack(side='left', fill='both', expand=True)
+        self._setup_results(results_container)
+        
+        # Right side: Metrics Dashboard (30% width)
+        metrics_container = ttk.LabelFrame(main_container, text="📊 Model Metrics", padding=10)
+        metrics_container.pack(side='right', fill='both', padx=(10, 0))
+        self._setup_metrics_dashboard(metrics_container)
+        
+        # Action Panel
+        self._setup_actions()
+        
+        # Menu Bar
+        self._setup_menu()
+    
+    def _setup_controls(self):
+        """Setup control panel"""
         control_frame = ttk.LabelFrame(self.root, text="Scan Controls", padding=10)
         control_frame.pack(fill='x', padx=10, pady=5)
         
-        # Directory selection
         dir_frame = ttk.Frame(control_frame)
         dir_frame.pack(fill='x', pady=5)
         
         ttk.Label(dir_frame, text="Directory:").pack(side='left', padx=5)
-        
         self.path_var = tk.StringVar(value=str(Path.home() / "Downloads"))
-        path_entry = ttk.Entry(dir_frame, textvariable=self.path_var, width=60)
-        path_entry.pack(side='left', padx=5, fill='x', expand=True)
+        ttk.Entry(dir_frame, textvariable=self.path_var, width=60).pack(side='left', padx=5, fill='x', expand=True)
+        ttk.Button(dir_frame, text="Browse", command=self.browse_directory).pack(side='left', padx=5)
         
-        browse_btn = ttk.Button(dir_frame, text="Browse", command=self.browse_directory)
-        browse_btn.pack(side='left', padx=5)
-        
-        # Scan button
         button_frame = ttk.Frame(control_frame)
         button_frame.pack(fill='x', pady=5)
         
@@ -91,69 +103,215 @@ class FilePurgeApp:
         
         self.cancel_btn = ttk.Button(button_frame, text="Cancel", command=self.cancel_scan, state='disabled')
         self.cancel_btn.pack(side='left', padx=5)
-        
-        # === Progress ===
+    
+    def _setup_progress(self):
+        """Setup progress indicators"""
         progress_frame = ttk.Frame(self.root, padding=5)
         progress_frame.pack(fill='x', padx=10)
         
         self.progress_var = tk.StringVar(value="Ready to scan")
-        progress_label = ttk.Label(progress_frame, textvariable=self.progress_var)
-        progress_label.pack()
+        ttk.Label(progress_frame, textvariable=self.progress_var).pack()
         
         self.progress_bar = ttk.Progressbar(progress_frame, mode='indeterminate')
         self.progress_bar.pack(fill='x', pady=5)
+    
+    def _setup_results(self, parent):
+        """Setup side-by-side results view"""
+        results_frame = ttk.LabelFrame(parent, text="Scan Results", padding=10)
+        results_frame.pack(fill='both', expand=True)
         
-        # === Results ===
-        results_frame = ttk.LabelFrame(self.root, text="Scan Results", padding=10)
-        results_frame.pack(fill='both', expand=True, padx=10, pady=5)
+        # Split into two columns
+        split_frame = ttk.Frame(results_frame)
+        split_frame.pack(fill='both', expand=True)
         
-        # Treeview
-        tree_frame = ttk.Frame(results_frame)
+        # Left: DELETE recommendations (red)
+        delete_frame = ttk.LabelFrame(split_frame, text="🔴 Recommended for Deletion", padding=5)
+        delete_frame.pack(side='left', fill='both', expand=True, padx=(0, 5))
+        self._create_tree(delete_frame, 'delete')
+        
+        # Right: KEEP recommendations (green)
+        keep_frame = ttk.LabelFrame(split_frame, text="🟢 Recommended to Keep", padding=5)
+        keep_frame.pack(side='right', fill='both', expand=True, padx=(5, 0))
+        self._create_tree(keep_frame, 'keep')
+    
+    def _create_tree(self, parent, tree_type):
+        """Create a treeview for delete or keep files"""
+        tree_frame = ttk.Frame(parent)
         tree_frame.pack(fill='both', expand=True)
         
-        columns = ('File', 'Size', 'Access', 'Recommendation', 'Confidence', 'ML', 'Anomaly')
-        self.tree = ttk.Treeview(tree_frame, columns=columns, show='tree headings', 
-                                 height=UI_CONFIG['tree_height'])
+        columns = ('File', 'Size', 'Access', 'Confidence')
+        tree = ttk.Treeview(tree_frame, columns=columns, show='tree headings', height=20)
         
-        # Configure columns
-        self.tree.heading('#0', text='☐')
-        self.tree.heading('File', text='File Path')
-        self.tree.heading('Size', text='Size (MB)')
-        self.tree.heading('Access', text='Days Unaccessed')
-        self.tree.heading('Recommendation', text='Recommendation')
-        self.tree.heading('Confidence', text='Confidence')
-        self.tree.heading('ML', text='ML Pred')
-        self.tree.heading('Anomaly', text='Anomaly')
-        self.tree.column('#0', width=50)
-        self.tree.column('File', width=400)
-        self.tree.column('Size', width=80)
-        self.tree.column('Access', width=100)
-        self.tree.column('Recommendation', width=120)
-        self.tree.column('Confidence', width=80)
-        self.tree.column('ML', width=60)
-        self.tree.column('Anomaly', width=60)
+        tree.heading('#0', text='☐')
+        tree.heading('File', text='File Path')
+        tree.heading('Size', text='Size (MB)')
+        tree.heading('Access', text='Days Unaccessed')
+        tree.heading('Confidence', text='Confidence')
+        
+        tree.column('#0', width=40)
+        tree.column('File', width=300)
+        tree.column('Size', width=80)
+        tree.column('Access', width=100)
+        tree.column('Confidence', width=80)
         
         # Scrollbars
-        vsb = ttk.Scrollbar(tree_frame, orient='vertical', command=self.tree.yview)
-        hsb = ttk.Scrollbar(tree_frame, orient='horizontal', command=self.tree.xview)
-        self.tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
+        vsb = ttk.Scrollbar(tree_frame, orient='vertical', command=tree.yview)
+        hsb = ttk.Scrollbar(tree_frame, orient='horizontal', command=tree.xview)
+        tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
         
-        self.tree.grid(row=0, column=0, sticky='nsew')
+        tree.grid(row=0, column=0, sticky='nsew')
         vsb.grid(row=0, column=1, sticky='ns')
         hsb.grid(row=1, column=0, sticky='ew')
         
         tree_frame.grid_rowconfigure(0, weight=1)
         tree_frame.grid_columnconfigure(0, weight=1)
         
-        # Tree click handler
-        self.tree.bind('<Button-1>', self.on_tree_click)
+        # Bind click event
+        tree.bind('<Button-1>', lambda e: self.on_tree_click(e, tree_type))
         
-        # === Action Panel ===
+        # Store reference
+        if tree_type == 'delete':
+            self.delete_tree = tree
+        else:
+            self.keep_tree = tree
+    
+    def _setup_metrics_dashboard(self, parent):
+        """Setup live metrics dashboard"""
+        # Create canvas with scrollbar
+        canvas = tk.Canvas(parent, width=350, highlightthickness=0)
+        scrollbar = ttk.Scrollbar(parent, orient="vertical", command=canvas.yview)
+        scrollable_frame = ttk.Frame(canvas)
+        
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        # Store references
+        self.metrics_frame = scrollable_frame
+        
+        # Initialize with placeholder
+        self._update_metrics_display({
+            'total': 0,
+            'delete_count': 0,
+            'keep_count': 0,
+            'deletion_rate': 0,
+            'avg_delete_conf': 0,
+            'avg_keep_conf': 0,
+            'total_size_gb': 0,
+            'delete_size_gb': 0,
+            'anomaly_count': 0,
+            'anomaly_rate': 0,
+            'categories': {},
+            'feedback': {'total_feedback': 0, 'files_kept': 0, 'files_deleted': 0, 'extensions_learned': 0}
+        })
+        
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+    
+    def _update_metrics_display(self, metrics):
+        """Update the metrics dashboard with current data"""
+        # Clear existing widgets
+        for widget in self.metrics_frame.winfo_children():
+            widget.destroy()
+        
+        m = metrics
+        
+        # Overall Statistics
+        ttk.Label(self.metrics_frame, text="📊 Overall Statistics", 
+                 font=('Segoe UI', 11, 'bold')).pack(anchor='w', pady=(0, 5))
+        ttk.Separator(self.metrics_frame, orient='horizontal').pack(fill='x', pady=5)
+        
+        ttk.Label(self.metrics_frame, text=f"Total Files: {m['total']:,}").pack(anchor='w')
+        ttk.Label(self.metrics_frame, text=f"DELETE: {m['delete_count']:,} ({m['deletion_rate']:.1f}%)").pack(anchor='w')
+        ttk.Label(self.metrics_frame, text=f"KEEP: {m['keep_count']:,} ({100-m['deletion_rate']:.1f}%)").pack(anchor='w')
+        
+        # Status indicator
+        if 40 <= m['deletion_rate'] <= 60:
+            status_text = "✅ Balanced"
+            status_color = "green"
+        elif m['deletion_rate'] > 70:
+            status_text = "⚠️ High"
+            status_color = "orange"
+        elif m['deletion_rate'] < 30:
+            status_text = "⚠️ Low"
+            status_color = "orange"
+        else:
+            status_text = "✓ OK"
+            status_color = "blue"
+        
+        ttk.Label(self.metrics_frame, text=f"Status: {status_text}", 
+                 foreground=status_color).pack(anchor='w', pady=(5, 10))
+        
+        # Confidence Metrics
+        ttk.Label(self.metrics_frame, text="🎯 Confidence", 
+                 font=('Segoe UI', 11, 'bold')).pack(anchor='w', pady=(10, 5))
+        ttk.Separator(self.metrics_frame, orient='horizontal').pack(fill='x', pady=5)
+        
+        delete_conf_status = "✅" if m['avg_delete_conf'] > 0.70 else "⚠️"
+        keep_conf_status = "✅" if m['avg_keep_conf'] > 0.65 else "⚠️"
+        
+        ttk.Label(self.metrics_frame, 
+                 text=f"DELETE: {m['avg_delete_conf']:.1%} {delete_conf_status}").pack(anchor='w')
+        ttk.Label(self.metrics_frame, 
+                 text=f"KEEP: {m['avg_keep_conf']:.1%} {keep_conf_status}").pack(anchor='w', pady=(0, 10))
+        
+        # Storage Impact
+        ttk.Label(self.metrics_frame, text="💾 Storage Impact", 
+                 font=('Segoe UI', 11, 'bold')).pack(anchor='w', pady=(10, 5))
+        ttk.Separator(self.metrics_frame, orient='horizontal').pack(fill='x', pady=5)
+        
+        ttk.Label(self.metrics_frame, text=f"Total: {m['total_size_gb']:.2f} GB").pack(anchor='w')
+        ttk.Label(self.metrics_frame, text=f"To Delete: {m['delete_size_gb']:.2f} GB").pack(anchor='w')
+        ttk.Label(self.metrics_frame, 
+                 text=f"To Keep: {m['total_size_gb']-m['delete_size_gb']:.2f} GB").pack(anchor='w', pady=(0, 10))
+        
+        # Anomaly Detection
+        ttk.Label(self.metrics_frame, text="🔍 Anomalies", 
+                 font=('Segoe UI', 11, 'bold')).pack(anchor='w', pady=(10, 5))
+        ttk.Separator(self.metrics_frame, orient='horizontal').pack(fill='x', pady=5)
+        
+        anomaly_status = "✅" if 5 <= m['anomaly_rate'] <= 15 else "⚠️"
+        ttk.Label(self.metrics_frame, 
+                 text=f"Detected: {m['anomaly_count']} ({m['anomaly_rate']:.1f}%) {anomaly_status}").pack(anchor='w', pady=(0, 10))
+        
+        # Top Categories
+        ttk.Label(self.metrics_frame, text="📁 Top Categories", 
+                 font=('Segoe UI', 11, 'bold')).pack(anchor='w', pady=(10, 5))
+        ttk.Separator(self.metrics_frame, orient='horizontal').pack(fill='x', pady=5)
+        
+        if m['categories']:
+            sorted_cats = sorted(m['categories'].items(), 
+                               key=lambda x: x[1]['total'], reverse=True)[:5]
+            for cat, stats in sorted_cats:
+                pct = stats['delete'] / stats['total'] * 100 if stats['total'] > 0 else 0
+                ttk.Label(self.metrics_frame, 
+                         text=f"{cat}: {stats['total']} ({pct:.0f}% del)").pack(anchor='w')
+        
+        # User Feedback
+        ttk.Label(self.metrics_frame, text="👤 Your Feedback", 
+                 font=('Segoe UI', 11, 'bold')).pack(anchor='w', pady=(15, 5))
+        ttk.Separator(self.metrics_frame, orient='horizontal').pack(fill='x', pady=5)
+        
+        ttk.Label(self.metrics_frame, 
+                 text=f"Decisions: {m['feedback']['total_feedback']}").pack(anchor='w')
+        ttk.Label(self.metrics_frame, 
+                 text=f"Kept: {m['feedback']['files_kept']}").pack(anchor='w')
+        ttk.Label(self.metrics_frame, 
+                 text=f"Deleted: {m['feedback']['files_deleted']}").pack(anchor='w')
+    
+    def _setup_actions(self):
+        """Setup action buttons"""
         action_frame = ttk.Frame(self.root, padding=10)
         action_frame.pack(fill='x', padx=10, pady=5)
         
-        ttk.Button(action_frame, text="Select All Recommended", 
-                  command=self.select_recommended).pack(side='left', padx=5)
+        ttk.Button(action_frame, text="Select All DELETE", 
+                  command=lambda: self.select_all('delete')).pack(side='left', padx=5)
+        ttk.Button(action_frame, text="Select All KEEP", 
+                  command=lambda: self.select_all('keep')).pack(side='left', padx=5)
         ttk.Button(action_frame, text="Deselect All", 
                   command=self.deselect_all).pack(side='left', padx=5)
         ttk.Button(action_frame, text="Simulate Delete", 
@@ -161,13 +319,12 @@ class FilePurgeApp:
         ttk.Button(action_frame, text="Export Report", 
                   command=self.export_report).pack(side='left', padx=5)
         
-        # Status
         self.status_var = tk.StringVar(value="")
-        status_label = ttk.Label(action_frame, textvariable=self.status_var, 
-                                foreground=COLORS['status_info'])
-        status_label.pack(side='left', padx=20)
-        
-        # === Menu Bar ===
+        ttk.Label(action_frame, textvariable=self.status_var, 
+                 foreground=COLORS['status_info']).pack(side='left', padx=20)
+    
+    def _setup_menu(self):
+        """Setup menu bar"""
         menubar = tk.Menu(self.root)
         self.root.config(menu=menubar)
         
@@ -180,7 +337,9 @@ class FilePurgeApp:
         help_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="Help", menu=help_menu)
         help_menu.add_command(label="About", command=self.show_about)
-        help_menu.add_command(label="Statistics", command=self.show_statistics)
+        help_menu.add_command(label="View Metrics Dashboard →", 
+                             command=lambda: messagebox.showinfo("Metrics", 
+                                 "The metrics dashboard is on the right side of the window!"))
     
     def browse_directory(self):
         """Browse for directory"""
@@ -196,20 +355,20 @@ class FilePurgeApp:
             messagebox.showerror("Error", "Directory does not exist")
             return
         
-        # Disable scan button
         self.scan_btn.config(state='disabled')
         self.cancel_btn.config(state='normal')
         
-        # Clear previous results
-        for item in self.tree.get_children():
-            self.tree.delete(item)
-        self.selected_indices.clear()
+        # Clear both trees
+        for item in self.delete_tree.get_children():
+            self.delete_tree.delete(item)
+        for item in self.keep_tree.get_children():
+            self.keep_tree.delete(item)
         
-        # Start progress
+        self.selected_indices = {'delete': set(), 'keep': set()}
+        
         self.progress_var.set("Starting scan...")
         self.progress_bar.start()
         
-        # Run in background
         thread = threading.Thread(target=self.scan_and_analyze, args=(path,), daemon=True)
         thread.start()
     
@@ -223,56 +382,38 @@ class FilePurgeApp:
         try:
             logger.info(f"Starting scan of {path}")
             
-            # Scan files
             def update_progress(count, status):
                 self.root.after(0, lambda: self.progress_var.set(
                     f"Scanned {count} files... {status[:50]}"
                 ))
             
-            self.scan_results = self.scanner.scan(
-                path,
-                max_files=5000,
-                progress_callback=update_progress
-            )
+            self.scan_results = self.scanner.scan(path, max_files=5000, progress_callback=update_progress)
             
             if not self.scan_results:
-                self.root.after(0, lambda: messagebox.showinfo(
-                    "Info", "No files found or scan cancelled"
-                ))
+                self.root.after(0, lambda: messagebox.showinfo("Info", "No files found or scan cancelled"))
                 self.root.after(0, self.scan_complete)
                 return
             
-            # ML Classification
             self.root.after(0, lambda: self.progress_var.set("Running ML classification..."))
             predictions, probabilities = self.classifier.predict(self.scan_results)
             
-            # Anomaly Detection
             self.root.after(0, lambda: self.progress_var.set("Detecting anomalies..."))
             anomaly_results = self.anomaly_detector.detect_with_reasons(self.scan_results)
             
-            # Generate Recommendations
             self.root.after(0, lambda: self.progress_var.set("Generating recommendations..."))
             self.recommendations = self.recommender.get_recommendations(
-                self.scan_results,
-                predictions.tolist(),
-                probabilities.tolist()
+                self.scan_results, predictions.tolist(), probabilities.tolist()
             )
             
-            # Combine results
-            for i, (file_data, rec, anom) in enumerate(zip(
-                self.scan_results, self.recommendations, anomaly_results
-            )):
+            for i, (file_data, rec, anom) in enumerate(zip(self.scan_results, self.recommendations, anomaly_results)):
                 file_data.update(rec)
                 file_data.update(anom)
             
-            # Display results
             self.root.after(0, self.display_results)
             
         except Exception as e:
             logger.exception(f"Error during scan: {e}")
-            self.root.after(0, lambda: messagebox.showerror(
-                "Error", f"Scan failed: {str(e)}"
-            ))
+            self.root.after(0, lambda: messagebox.showerror("Error", f"Scan failed: {str(e)}"))
         finally:
             self.root.after(0, self.scan_complete)
     
@@ -284,99 +425,146 @@ class FilePurgeApp:
         self.progress_var.set("Scan complete")
     
     def display_results(self):
-        """Display scan results"""
-        # Clear tree
-        for item in self.tree.get_children():
-            self.tree.delete(item)
+        """Display scan results in side-by-side trees"""
+        # Clear trees
+        for item in self.delete_tree.get_children():
+            self.delete_tree.delete(item)
+        for item in self.keep_tree.get_children():
+            self.keep_tree.delete(item)
         
-        # Sort by recommendation confidence
-        sorted_results = sorted(
-            self.scan_results,
-            key=lambda x: (x.get('recommend_delete', False), x.get('confidence', 0)),
-            reverse=True
-        )
+        # Separate and sort results
+        delete_files = [f for f in self.scan_results if f.get('recommend_delete')]
+        keep_files = [f for f in self.scan_results if not f.get('recommend_delete')]
         
-        # Add to tree
-        for i, file_data in enumerate(sorted_results[:1000]):  # Limit to 1000 for performance
-            rec = "DELETE" if file_data.get('recommend_delete') else "KEEP"
-            conf = file_data.get('confidence', 0)
-            ml_pred = "KEEP" if file_data.get('ml_prediction') == 1 else "DEL"
-            anom = "Yes" if file_data.get('is_anomaly') else "No"
-            
+        delete_files.sort(key=lambda x: x.get('confidence', 0), reverse=True)
+        keep_files.sort(key=lambda x: x.get('confidence', 0), reverse=True)
+        
+        # Populate delete tree (red background)
+        for i, file_data in enumerate(delete_files[:1000]):
             values = (
                 file_data.get('path', ''),
                 f"{file_data.get('size_mb', 0):.2f}",
                 f"{file_data.get('accessed_days_ago', 0):.0f}",
-                rec,
-                f"{conf:.1%}",
-                ml_pred,
-                anom
+                f"{file_data.get('confidence', 0):.1%}"
             )
-            
-            tag = 'delete' if file_data.get('recommend_delete') else 'keep'
-            item_id = self.tree.insert('', 'end', text='☐', values=values, tags=(tag, str(i)))
+            self.delete_tree.insert('', 'end', text='☐', values=values, 
+                                   tags=('delete', str(i)))
         
-        # Configure tags
-        self.tree.tag_configure('delete', background=COLORS['delete_bg'])
-        self.tree.tag_configure('keep', background=COLORS['keep_bg'])
+        self.delete_tree.tag_configure('delete', background=COLORS['delete_bg'])
         
-        # Update status
-        delete_count = sum(1 for f in self.scan_results if f.get('recommend_delete'))
-        total_size = sum(f.get('size_mb', 0) for f in self.scan_results if f.get('recommend_delete'))
+        # Populate keep tree (green background)
+        for i, file_data in enumerate(keep_files[:1000]):
+            values = (
+                file_data.get('path', ''),
+                f"{file_data.get('size_mb', 0):.2f}",
+                f"{file_data.get('accessed_days_ago', 0):.0f}",
+                f"{file_data.get('confidence', 0):.1%}"
+            )
+            self.keep_tree.insert('', 'end', text='☐', values=values, 
+                                 tags=('keep', str(i)))
+        
+        self.keep_tree.tag_configure('keep', background=COLORS['keep_bg'])
+        
+        # Update metrics dashboard
+        metrics = self._calculate_metrics()
+        self._update_metrics_display(metrics)
+        
+        # Update status bar
+        delete_count = len(delete_files)
+        total_size = sum(f.get('size_mb', 0) for f in delete_files)
         
         self.status_var.set(
             f"Found {len(self.scan_results)} files | "
-            f"{delete_count} recommended for deletion ({total_size:.1f} MB)"
+            f"DELETE: {delete_count} ({total_size:.1f} MB) | "
+            f"KEEP: {len(keep_files)}"
         )
     
-    def on_tree_click(self, event):
-        """Handle tree click for selection"""
-        region = self.tree.identify('region', event.x, event.y)
-        if region == 'tree':
-            item = self.tree.identify_row(event.y)
-            if item:
-                # Toggle selection
-                current_text = self.tree.item(item, 'text')
-                if current_text == '☐':
-                    self.tree.item(item, text='☑')
-                    # Extract index from tags
-                    tags = self.tree.item(item, 'tags')
-                    for tag in tags:
-                        if tag.isdigit():
-                            self.selected_indices.add(int(tag))
-                else:
-                    self.tree.item(item, text='☐')
-                    tags = self.tree.item(item, 'tags')
-                    for tag in tags:
-                        if tag.isdigit():
-                            self.selected_indices.discard(int(tag))
+    def _calculate_metrics(self):
+        """Calculate all performance metrics"""
+        total = len(self.scan_results)
+        delete_files = [f for f in self.scan_results if f.get('recommend_delete')]
+        keep_files = [f for f in self.scan_results if not f.get('recommend_delete')]
+        
+        metrics = {
+            'total': total,
+            'delete_count': len(delete_files),
+            'keep_count': len(keep_files),
+            'deletion_rate': len(delete_files) / total * 100 if total > 0 else 0,
+            'avg_delete_conf': sum(f.get('confidence', 0) for f in delete_files) / len(delete_files) if delete_files else 0,
+            'avg_keep_conf': sum(f.get('confidence', 0) for f in keep_files) / len(keep_files) if keep_files else 0,
+            'total_size_gb': sum(f.get('size_mb', 0) for f in self.scan_results) / 1024,
+            'delete_size_gb': sum(f.get('size_mb', 0) for f in delete_files) / 1024,
+            'anomaly_count': sum(1 for f in self.scan_results if f.get('is_anomaly')),
+            'anomaly_rate': sum(1 for f in self.scan_results if f.get('is_anomaly')) / total * 100 if total > 0 else 0,
+        }
+        
+        # Category stats
+        from collections import defaultdict
+        metrics['categories'] = defaultdict(lambda: {'total': 0, 'delete': 0})
+        for f in self.scan_results:
+            cat = f.get('category', 'other')
+            metrics['categories'][cat]['total'] += 1
+            if f.get('recommend_delete'):
+                metrics['categories'][cat]['delete'] += 1
+        
+        # User feedback
+        metrics['feedback'] = self.recommender.get_statistics()
+        
+        return metrics
     
-    def select_recommended(self):
-        """Select all files recommended for deletion"""
-        self.selected_indices.clear()
-        for item in self.tree.get_children():
-            tags = self.tree.item(item, 'tags')
-            if 'delete' in tags:
-                self.tree.item(item, text='☑')
+    def on_tree_click(self, event, tree_type):
+        """Handle tree click for selection"""
+        tree = self.delete_tree if tree_type == 'delete' else self.keep_tree
+        region = tree.identify('region', event.x, event.y)
+        
+        if region == 'tree':
+            item = tree.identify_row(event.y)
+            if item:
+                current_text = tree.item(item, 'text')
+                new_text = '☑' if current_text == '☐' else '☐'
+                tree.item(item, text=new_text)
+                
+                tags = tree.item(item, 'tags')
                 for tag in tags:
                     if tag.isdigit():
-                        self.selected_indices.add(int(tag))
+                        idx = int(tag)
+                        if new_text == '☑':
+                            self.selected_indices[tree_type].add(idx)
+                        else:
+                            self.selected_indices[tree_type].discard(idx)
+    
+    def select_all(self, tree_type):
+        """Select all in specified tree"""
+        tree = self.delete_tree if tree_type == 'delete' else self.keep_tree
+        self.selected_indices[tree_type].clear()
+        
+        for item in tree.get_children():
+            tree.item(item, text='☑')
+            tags = tree.item(item, 'tags')
+            for tag in tags:
+                if tag.isdigit():
+                    self.selected_indices[tree_type].add(int(tag))
     
     def deselect_all(self):
         """Deselect all files"""
-        self.selected_indices.clear()
-        for item in self.tree.get_children():
-            self.tree.item(item, text='☐')
+        self.selected_indices = {'delete': set(), 'keep': set()}
+        
+        for item in self.delete_tree.get_children():
+            self.delete_tree.item(item, text='☐')
+        for item in self.keep_tree.get_children():
+            self.keep_tree.item(item, text='☐')
     
     def simulate_delete(self):
         """Simulate file deletion"""
-        if not self.selected_indices:
+        total_selected = len(self.selected_indices['delete']) + len(self.selected_indices['keep'])
+        
+        if total_selected == 0:
             messagebox.showinfo("Info", "No files selected")
             return
         
         response = messagebox.askyesno(
             "Confirm Simulation",
-            f"Simulate deletion of {len(self.selected_indices)} files?\n\n"
+            f"Simulate deletion of {total_selected} files?\n\n"
             "Note: Files will NOT actually be deleted (simulation mode).\n"
             "Your choices will be recorded to improve recommendations."
         )
@@ -385,26 +573,36 @@ class FilePurgeApp:
             return
         
         # Record feedback
-        for idx in self.selected_indices:
-            if idx < len(self.scan_results):
-                self.recommender.record_choice(self.scan_results[idx], user_kept=False)
+        delete_files = [f for f in self.scan_results if f.get('recommend_delete')]
+        keep_files = [f for f in self.scan_results if not f.get('recommend_delete')]
         
-        # Remove from display
+        for idx in self.selected_indices['delete']:
+            if idx < len(delete_files):
+                self.recommender.record_choice(delete_files[idx], user_kept=False)
+        
+        for idx in self.selected_indices['keep']:
+            if idx < len(keep_files):
+                self.recommender.record_choice(keep_files[idx], user_kept=False)
+        
+        # Remove from trees
         items_to_remove = []
-        for item in self.tree.get_children():
-            if self.tree.item(item, 'text') == '☑':
+        for item in self.delete_tree.get_children():
+            if self.delete_tree.item(item, 'text') == '☑':
                 items_to_remove.append(item)
-        
         for item in items_to_remove:
-            self.tree.delete(item)
+            self.delete_tree.delete(item)
         
-        self.selected_indices.clear()
+        items_to_remove = []
+        for item in self.keep_tree.get_children():
+            if self.keep_tree.item(item, 'text') == '☑':
+                items_to_remove.append(item)
+        for item in items_to_remove:
+            self.keep_tree.delete(item)
         
-        messagebox.showinfo(
-            "Success",
-            f"Simulated deletion of {len(items_to_remove)} files.\n"
-            "Feedback recorded for future recommendations."
-        )
+        self.selected_indices = {'delete': set(), 'keep': set()}
+        messagebox.showinfo("Success",
+            f"Simulated deletion of {total_selected} files.\n"
+            "Feedback recorded for future recommendations.")
     
     def export_report(self):
         """Export results to CSV"""
@@ -426,8 +624,7 @@ class FilePurgeApp:
     
     def show_about(self):
         """Show about dialog"""
-        messagebox.showinfo(
-            "About",
+        messagebox.showinfo("About",
             f"{APP_NAME} v{APP_VERSION}\n\n"
             f"{TEAM_NAME}\n"
             "CECS 451 - Fall 2025\n\n"
@@ -436,26 +633,6 @@ class FilePurgeApp:
             "• Anomaly Detection\n"
             "• Personalized Recommendations"
         )
-    
-    def show_statistics(self):
-        """Show application statistics"""
-        stats = self.recommender.get_statistics()
-        scanner_stats = self.scanner.get_statistics()
-        
-        msg = (
-            "Application Statistics\n\n"
-            f"Files Scanned: {scanner_stats.get('files_scanned', 0)}\n"
-            f"Directories: {scanner_stats.get('directories_scanned', 0)}\n"
-            f"Errors: {scanner_stats.get('errors', 0)}\n\n"
-            f"User Feedback:\n"
-            f"  Total Decisions: {stats['total_feedback']}\n"
-            f"  Files Kept: {stats['files_kept']}\n"
-            f"  Files Deleted: {stats['files_deleted']}\n"
-            f"  Extensions Learned: {stats['extensions_learned']}\n"
-            f"  Categories Learned: {stats['categories_learned']}\n"
-        )
-        
-        messagebox.showinfo("Statistics", msg)
     
     def run(self):
         """Run the application"""
