@@ -10,11 +10,12 @@ import logging
 from pathlib import Path
 
 # Add src to path
-sys.path.insert(0, str(Path(__file__).parent / 'src'))
+sys.path.insert(0, str(Path(__file__).parent))
 
 from src.core.config import LOG_CONFIG, APP_NAME, APP_VERSION
 from src.utils.logger import setup_logger
 from src.gui.main_window import FilePurgeApp
+
 
 def main():
     """Main application entry point"""

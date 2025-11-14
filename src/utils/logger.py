@@ -1,65 +1,55 @@
 """
-Export utilities for generating reports
+Logging setup utilities
 """
 
-import csv
-import json
-from typing import List, Dict
-from pathlib import Path
 import logging
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
 
-logger = logging.getLogger(__name__)
 
-
-def export_to_csv(data: List[Dict], filepath: str):
+def setup_logger(log_file: Path, level: str = 'INFO'):
     """
-    Export scan results to CSV
+    Setup application logging
     
     Args:
-        data: List of file dictionaries
-        filepath: Output CSV file path
+        log_file: Path to log file
+        level: Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
     """
-    if not data:
-        raise ValueError("No data to export")
+    # Ensure log directory exists
+    log_file.parent.mkdir(parents=True, exist_ok=True)
     
-    # Define columns to export
-    columns = [
-        'path', 'name', 'extension', 'category',
-        'size_mb', 'accessed_days_ago', 'modified_days_ago',
-        'recommend_delete', 'confidence', 'ml_prediction', 'ml_confidence',
-        'is_anomaly', 'is_disposable_ext', 'is_hidden'
-    ]
+    # Convert string level to logging constant
+    numeric_level = getattr(logging, level.upper(), logging.INFO)
     
-    try:
-        with open(filepath, 'w', newline='', encoding='utf-8') as f:
-            writer = csv.DictWriter(f, fieldnames=columns, extrasaction='ignore')
-            writer.writeheader()
-            writer.writerows(data)
-        
-        logger.info(f"Exported {len(data)} rows to {filepath}")
+    # Configure root logger
+    logger = logging.getLogger()
+    logger.setLevel(numeric_level)
     
-    except Exception as e:
-        logger.error(f"Error exporting to CSV: {e}")
-        raise
-
-
-def export_to_json(data: List[Dict], filepath: str):
-    """
-    Export scan results to JSON
+    # Remove existing handlers
+    logger.handlers.clear()
     
-    Args:
-        data: List of file dictionaries
-        filepath: Output JSON file path
-    """
-    if not data:
-        raise ValueError("No data to export")
+    # Console handler
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(numeric_level)
+    console_formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    console_handler.setFormatter(console_formatter)
+    logger.addHandler(console_handler)
     
-    try:
-        with open(filepath, 'w', encoding='utf-8') as f:
-            json.dump(data, f, indent=2, default=str)
-        
-        logger.info(f"Exported {len(data)} entries to {filepath}")
+    # File handler with rotation
+    file_handler = RotatingFileHandler(
+        log_file,
+        maxBytes=10 * 1024 * 1024,  # 10 MB
+        backupCount=5
+    )
+    file_handler.setLevel(numeric_level)
+    file_formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    file_handler.setFormatter(file_formatter)
+    logger.addHandler(file_handler)
     
-    except Exception as e:
-        logger.error(f"Error exporting to JSON: {e}")
-        raise
+    logger.info(f"Logging configured: {log_file}")
