@@ -1,5 +1,5 @@
 """
-Machine Learning classifier for file importance prediction
+Machine Learning classifier for file importance prediction - FIXED
 """
 
 import numpy as np
@@ -31,7 +31,7 @@ class MLClassifier:
     
     def generate_synthetic_data(self, n_samples: int = None) -> Tuple[List[Dict], np.ndarray]:
         """
-        Generate synthetic training data based on heuristics
+        Generate synthetic training data based on heuristics - FIXED: Less aggressive
         
         Args:
             n_samples: Number of samples to generate
@@ -62,16 +62,26 @@ class MLClassifier:
             # Depth (shallower files more common)
             depth = int(np.random.exponential(3) + 2)
             
-            # === Labeling Heuristic ===
+            # === FIXED: Labeling Heuristic (Less Aggressive) ===
             # Start with KEEP (1)
             label = 1
             
             # DELETE (0) if meets certain criteria
             delete_score = 0
+            keep_score = 0
             
-            # Disposable extensions are likely deletable
+            # Positive signals (KEEP)
+            if accessed_days < 30:
+                keep_score += 3  # Recently used
+            if size_mb < 1 and accessed_days < 90:
+                keep_score += 2  # Small recent files
+            if not is_disposable and accessed_days < 180:
+                keep_score += 1  # Non-disposable and somewhat recent
+            
+            # Negative signals (DELETE)
+            # FIXED: Reduced from 3 to 2
             if is_disposable:
-                delete_score += 3
+                delete_score += 2
             
             # Not accessed in 6 months
             if accessed_days > FEATURE_CONFIG['access_threshold_days']:
@@ -81,7 +91,7 @@ class MLClassifier:
             if size_mb > FEATURE_CONFIG['large_file_threshold_mb'] and accessed_days > 90:
                 delete_score += 2
             
-            # Very old files
+            # Very old files (over 2 years)
             if modified_days > FEATURE_CONFIG['old_file_threshold_days']:
                 delete_score += 1
             
@@ -89,9 +99,12 @@ class MLClassifier:
             if is_hidden and accessed_days > 90:
                 delete_score += 1
             
-            # Decide based on score
-            if delete_score >= 3:
+            # FIXED: Decide based on score (changed from >= 3 to >= 4)
+            net_score = delete_score - keep_score
+            if net_score >= 4:  # More conservative
                 label = 0  # DELETE
+            else:
+                label = 1  # KEEP
             
             # Create synthetic file metadata
             file_metadata = {
@@ -118,9 +131,56 @@ class MLClassifier:
             synthetic_data.append(file_metadata)
             labels.append(label)
         
-        logger.info(f"Generated synthetic data: {sum(labels)} KEEP, {len(labels) - sum(labels)} DELETE")
+        # FIXED: Balance the dataset for better KEEP confidence
+        labels = np.array(labels)
+        delete_count = np.sum(labels == 0)
+        keep_count = np.sum(labels == 1)
         
-        return synthetic_data, np.array(labels)
+        # Target: 60% DELETE, 40% KEEP (currently would be ~87% DELETE)
+        target_delete_ratio = 0.6
+        current_ratio = delete_count / len(labels)
+        
+        if current_ratio > target_delete_ratio:
+            # Too many DELETEs, add more KEEPs
+            n_extra_keeps = int(delete_count * 0.67 - keep_count)
+            
+            if n_extra_keeps > 0:
+                # Generate additional KEEP examples
+                for i in range(n_extra_keeps):
+                    # Create files that should clearly be kept
+                    size_mb = np.random.lognormal(-1, 1)  # Smaller files
+                    created_days = np.random.uniform(1, 365)
+                    accessed_days = np.random.uniform(0, 30)  # Recently accessed
+                    modified_days = np.random.uniform(accessed_days, created_days)
+                    
+                    file_metadata = {
+                        'size_mb': size_mb,
+                        'size_bytes': size_mb * 1024 * 1024,
+                        'size_kb': size_mb * 1024,
+                        'created_days_ago': created_days,
+                        'modified_days_ago': modified_days,
+                        'accessed_days_ago': accessed_days,
+                        'is_hidden': False,
+                        'depth': int(np.random.exponential(2) + 2),
+                        'is_disposable_ext': False,
+                        'in_system_folder': False,
+                        'days_since_modification': modified_days,
+                        'days_since_access': accessed_days,
+                        'access_to_modify_ratio': accessed_days / max(modified_days, 0.1),
+                        'is_recent': True,
+                        'is_old': False,
+                        'is_large': False,
+                        'extension': np.random.choice(['pdf', 'docx', 'jpg', 'png']),
+                        'category': np.random.choice(['documents', 'images']),
+                    }
+                    
+                    synthetic_data.append(file_metadata)
+                    labels = np.append(labels, 1)
+        
+        logger.info(f"Generated synthetic data: {np.sum(labels == 1)} KEEP, {np.sum(labels == 0)} DELETE")
+        logger.info(f"Delete rate: {np.sum(labels == 0) / len(labels) * 100:.1f}%")
+        
+        return synthetic_data, labels
     
     def train(self, file_data: Optional[List[Dict]] = None, labels: Optional[np.ndarray] = None):
         """
