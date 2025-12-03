@@ -32,8 +32,8 @@ python main.py
 1. Click **Browse** and select a directory to scan
 2. Click **Start Scan** to analyze files
 3. Review results (🔴 red = delete, 🟢 green = keep)
-4. Select files or click **Select All Recommended**
-5. Click **Simulate Delete** to test safely (no files actually deleted)
+4. Select files or click **Select All DELETE** / **Select All KEEP**
+5. Click **Delete Files** (choose Recycle Bin or permanent deletion)
 6. Use **Export Report** to save results
 
 ## Understanding Results
@@ -55,11 +55,12 @@ File Scan → Feature Extraction → ML Prediction → User Review → Learning
 - **Reinforcement Learning** - Learns from your keep/delete decisions
 
 ## Privacy & Safety
-✅ Only analyzes metadata (size, dates, extension)  
-✅ Never reads file contents  
-✅ No data sent to external servers  
-✅ Automatic system folder protection  
-✅ Simulation mode by default
+✅ Only analyzes metadata (size, dates, extension)
+✅ Never reads file contents
+✅ No data sent to external servers
+✅ Automatic system folder protection
+✅ Recycle Bin support (files can be recovered)
+⚠️ Permanent deletion option available (use with caution)
 
 ## Project Structure
 ```
@@ -111,10 +112,10 @@ python -m pytest tests/
 - **Scan Speed:** 100-200 files/second
 
 ## Future Plans
-- Actual file deletion with recycle bin support
 - Duplicate file detection
 - Scheduled automatic scans
 - Cloud storage integration
+- Undo functionality for recent deletions
 
 ---
 **CECS 451 Fall 2025 - Phase 3 Project**

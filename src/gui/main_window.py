@@ -1,6 +1,6 @@
 """
 Main application window with side-by-side results and live metrics dashboard
-UPDATED: Added Type column to show file extensions + SORTABLE columns
+Refactored for better organization and maintainability
 """
 
 import tkinter as tk
@@ -16,6 +16,8 @@ from ..ai.ml_classifier import MLClassifier
 from ..ai.anomaly_detector import AnomalyDetector
 from ..ai.recommender import RecommendationEngine
 from ..utils.export import export_to_csv
+from .tree_manager import TreeManager
+from .file_operations import FileOperationsHandler
 
 logger = logging.getLogger(__name__)
 
@@ -27,32 +29,27 @@ class FilePurgeApp:
         self.root = tk.Tk()
         self.root.title(f"{APP_NAME} v{APP_VERSION} - {TEAM_NAME}")
         self.root.geometry("1600x900")  # Wider for side-by-side view
-        
+
         # Initialize components
         self.analyzer = FileAnalyzer()
         self.scanner = DirectoryScanner(self.analyzer)
         self.classifier = MLClassifier()
         self.anomaly_detector = AnomalyDetector()
         self.recommender = RecommendationEngine()
-        
+
+        # Initialize managers
+        self.tree_manager = TreeManager()
+        self.file_ops = FileOperationsHandler(self.recommender, self.root)
+
         # Data storage
         self.scan_results = []
         self.recommendations = []
-        self.selected_indices = {'delete': set(), 'keep': set()}
-        
-        # Sorting state
-        self.delete_sort_column = None
-        self.delete_sort_reverse = False
-        self.keep_sort_column = None
-        self.keep_sort_reverse = False
-        
-        # Filtered/sorted data
-        self.delete_files = []
-        self.keep_files = []
-        
+        self.delete_files_list = []
+        self.keep_files_list = []
+
         # Setup UI
         self.setup_ui()
-        
+
         logger.info("Application initialized")
     
     def setup_ui(self):
@@ -130,159 +127,50 @@ class FilePurgeApp:
         """Setup side-by-side results view"""
         results_frame = ttk.LabelFrame(parent, text="Scan Results", padding=10)
         results_frame.pack(fill='both', expand=True)
-        
+
         # Split into two columns
         split_frame = ttk.Frame(results_frame)
         split_frame.pack(fill='both', expand=True)
-        
+
         # Left: DELETE recommendations (red)
         delete_frame = ttk.LabelFrame(split_frame, text="🔴 Recommended for Deletion", padding=5)
         delete_frame.pack(side='left', fill='both', expand=True, padx=(0, 5))
-        self._create_tree(delete_frame, 'delete')
-        
+        self.tree_manager.create_tree(delete_frame, 'delete', self.tree_manager.on_tree_click)
+
         # Right: KEEP recommendations (green)
         keep_frame = ttk.LabelFrame(split_frame, text="🟢 Recommended to Keep", padding=5)
         keep_frame.pack(side='right', fill='both', expand=True, padx=(5, 0))
-        self._create_tree(keep_frame, 'keep')
+        self.tree_manager.create_tree(keep_frame, 'keep', self.tree_manager.on_tree_click)
     
-    def _create_tree(self, parent, tree_type):
-        """Create a treeview for delete or keep files - WITH SORTABLE COLUMNS"""
-        tree_frame = ttk.Frame(parent)
-        tree_frame.pack(fill='both', expand=True)
-        
-        columns = ('File', 'Type', 'Size', 'Access', 'Confidence')
-        tree = ttk.Treeview(tree_frame, columns=columns, show='tree headings', height=20)
-        
-        tree.heading('#0', text='☐')
-        tree.heading('File', text='File Path', command=lambda: self.sort_tree(tree_type, 'File'))
-        tree.heading('Type', text='Type', command=lambda: self.sort_tree(tree_type, 'Type'))
-        tree.heading('Size', text='Size (MB) ⇅', command=lambda: self.sort_tree(tree_type, 'Size'))
-        tree.heading('Access', text='Days Unaccessed ⇅', command=lambda: self.sort_tree(tree_type, 'Access'))
-        tree.heading('Confidence', text='Confidence', command=lambda: self.sort_tree(tree_type, 'Confidence'))
-        
-        tree.column('#0', width=40)
-        tree.column('File', width=260)
-        tree.column('Type', width=70)
-        tree.column('Size', width=80)
-        tree.column('Access', width=100)
-        tree.column('Confidence', width=80)
-        
-        # Scrollbars
-        vsb = ttk.Scrollbar(tree_frame, orient='vertical', command=tree.yview)
-        hsb = ttk.Scrollbar(tree_frame, orient='horizontal', command=tree.xview)
-        tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
-        
-        tree.grid(row=0, column=0, sticky='nsew')
-        vsb.grid(row=0, column=1, sticky='ns')
-        hsb.grid(row=1, column=0, sticky='ew')
-        
-        tree_frame.grid_rowconfigure(0, weight=1)
-        tree_frame.grid_columnconfigure(0, weight=1)
-        
-        # Bind click event
-        tree.bind('<Button-1>', lambda e: self.on_tree_click(e, tree_type))
-        
-        # Store reference
-        if tree_type == 'delete':
-            self.delete_tree = tree
-        else:
-            self.keep_tree = tree
-    
-    def sort_tree(self, tree_type, column):
-        """Sort tree by column (ascending/descending toggle)"""
-        tree = self.delete_tree if tree_type == 'delete' else self.keep_tree
-        files = self.delete_files if tree_type == 'delete' else self.keep_files
-        
-        # Toggle sort direction
-        if tree_type == 'delete':
-            if self.delete_sort_column == column:
-                self.delete_sort_reverse = not self.delete_sort_reverse
-            else:
-                self.delete_sort_column = column
-                self.delete_sort_reverse = False
-            reverse = self.delete_sort_reverse
-        else:
-            if self.keep_sort_column == column:
-                self.keep_sort_reverse = not self.keep_sort_reverse
-            else:
-                self.keep_sort_column = column
-                self.keep_sort_reverse = False
-            reverse = self.keep_sort_reverse
-        
-        # Sort data
-        if column == 'File':
-            files.sort(key=lambda x: x.get('path', '').lower(), reverse=reverse)
-        elif column == 'Type':
-            files.sort(key=lambda x: x.get('extension', '').lower(), reverse=reverse)
-        elif column == 'Size':
-            files.sort(key=lambda x: x.get('size_mb', 0), reverse=reverse)
-        elif column == 'Access':
-            files.sort(key=lambda x: x.get('accessed_days_ago', 0), reverse=reverse)
-        elif column == 'Confidence':
-            files.sort(key=lambda x: x.get('confidence', 0), reverse=reverse)
-        
-        # Update heading to show sort direction
-        direction = '▼' if reverse else '▲'
-        tree.heading('File', text='File Path' + (' ' + direction if column == 'File' else ''))
-        tree.heading('Type', text='Type' + (' ' + direction if column == 'Type' else ''))
-        tree.heading('Size', text=f'Size (MB) {direction if column == "Size" else "⇅"}')
-        tree.heading('Access', text=f'Days Unaccessed {direction if column == "Access" else "⇅"}')
-        tree.heading('Confidence', text='Confidence' + (' ' + direction if column == 'Confidence' else ''))
-        
-        # Re-populate tree
-        self._populate_tree(tree, files, tree_type)
-    
-    def _populate_tree(self, tree, files, tree_type):
-        """Populate tree with files"""
-        # Clear tree
-        for item in tree.get_children():
-            tree.delete(item)
-        
-        # Add files
-        for i, file_data in enumerate(files[:1000]):
-            ext = file_data.get('extension', '')
-            category = file_data.get('category', '')
-            if category and category != 'other':
-                type_display = f".{ext}"
-            else:
-                type_display = f"" if ext else "N/A"
-            
-            values = (
-                file_data.get('path', ''),
-                type_display,
-                f"{file_data.get('size_mb', 0):.2f}",
-                f"{file_data.get('accessed_days_ago', 0):.0f}",
-                f"{file_data.get('confidence', 0):.1%}"
-            )
-            
-            # Check if this file was selected
-            is_selected = i in self.selected_indices[tree_type]
-            checkbox = '☑' if is_selected else '☐'
-            
-            tree.insert('', 'end', text=checkbox, values=values, 
-                       tags=(tree_type, str(i)))
-        
-        tree.tag_configure('delete', background=COLORS['delete_bg'])
-        tree.tag_configure('keep', background=COLORS['keep_bg'])
+    # Tree operations now handled by TreeManager
     
     def _setup_metrics_dashboard(self, parent):
-        """Setup live metrics dashboard"""
+        """Setup live metrics dashboard with mouse wheel scrolling"""
         # Create canvas with scrollbar
         canvas = tk.Canvas(parent, width=350, highlightthickness=0)
         scrollbar = ttk.Scrollbar(parent, orient="vertical", command=canvas.yview)
         scrollable_frame = ttk.Frame(canvas)
-        
+
         scrollable_frame.bind(
             "<Configure>",
             lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
         )
-        
+
         canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
         canvas.configure(yscrollcommand=scrollbar.set)
-        
-        # Store references
+
+        # Enable mouse wheel scrolling
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+
+        # Bind mouse wheel to canvas and all child widgets
+        canvas.bind_all("<MouseWheel>", _on_mousewheel)
+
+        # Store references (prevent garbage collection)
+        self.metrics_canvas = canvas
         self.metrics_frame = scrollable_frame
-        
+        self.metrics_scrollbar = scrollbar
+
         # Initialize with placeholder
         self._update_metrics_display({
             'total': 0,
@@ -298,7 +186,7 @@ class FilePurgeApp:
             'categories': {},
             'feedback': {'total_feedback': 0, 'files_kept': 0, 'files_deleted': 0, 'extensions_learned': 0}
         })
-        
+
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
     
@@ -307,18 +195,18 @@ class FilePurgeApp:
         # Clear existing widgets
         for widget in self.metrics_frame.winfo_children():
             widget.destroy()
-        
+
         m = metrics
-        
+
         # Overall Statistics
-        ttk.Label(self.metrics_frame, text="📊 Overall Statistics", 
+        ttk.Label(self.metrics_frame, text="📊 Overall Statistics",
                  font=('Segoe UI', 11, 'bold')).pack(anchor='w', pady=(0, 5))
         ttk.Separator(self.metrics_frame, orient='horizontal').pack(fill='x', pady=5)
-        
+
         ttk.Label(self.metrics_frame, text=f"Total Files: {m['total']:,}").pack(anchor='w')
         ttk.Label(self.metrics_frame, text=f"DELETE: {m['delete_count']:,} ({m['deletion_rate']:.1f}%)").pack(anchor='w')
         ttk.Label(self.metrics_frame, text=f"KEEP: {m['keep_count']:,} ({100-m['deletion_rate']:.1f}%)").pack(anchor='w')
-        
+
         # Status indicator
         if 40 <= m['deletion_rate'] <= 60:
             status_text = "✅ Balanced"
@@ -332,66 +220,70 @@ class FilePurgeApp:
         else:
             status_text = "✓ OK"
             status_color = "blue"
-        
-        ttk.Label(self.metrics_frame, text=f"Status: {status_text}", 
+
+        ttk.Label(self.metrics_frame, text=f"Status: {status_text}",
                  foreground=status_color).pack(anchor='w', pady=(5, 10))
-        
+
         # Confidence Metrics
-        ttk.Label(self.metrics_frame, text="🎯 Confidence", 
+        ttk.Label(self.metrics_frame, text="🎯 Confidence",
                  font=('Segoe UI', 11, 'bold')).pack(anchor='w', pady=(10, 5))
         ttk.Separator(self.metrics_frame, orient='horizontal').pack(fill='x', pady=5)
-        
+
         delete_conf_status = "✅" if m['avg_delete_conf'] > 0.70 else "⚠️"
         keep_conf_status = "✅" if m['avg_keep_conf'] > 0.65 else "⚠️"
-        
-        ttk.Label(self.metrics_frame, 
+
+        ttk.Label(self.metrics_frame,
                  text=f"DELETE: {m['avg_delete_conf']:.1%} {delete_conf_status}").pack(anchor='w')
-        ttk.Label(self.metrics_frame, 
+        ttk.Label(self.metrics_frame,
                  text=f"KEEP: {m['avg_keep_conf']:.1%} {keep_conf_status}").pack(anchor='w', pady=(0, 10))
-        
+
         # Storage Impact
-        ttk.Label(self.metrics_frame, text="💾 Storage Impact", 
+        ttk.Label(self.metrics_frame, text="💾 Storage Impact",
                  font=('Segoe UI', 11, 'bold')).pack(anchor='w', pady=(10, 5))
         ttk.Separator(self.metrics_frame, orient='horizontal').pack(fill='x', pady=5)
-        
+
         ttk.Label(self.metrics_frame, text=f"Total: {m['total_size_gb']:.2f} GB").pack(anchor='w')
         ttk.Label(self.metrics_frame, text=f"To Delete: {m['delete_size_gb']:.2f} GB").pack(anchor='w')
-        ttk.Label(self.metrics_frame, 
+        ttk.Label(self.metrics_frame,
                  text=f"To Keep: {m['total_size_gb']-m['delete_size_gb']:.2f} GB").pack(anchor='w', pady=(0, 10))
-        
+
         # Anomaly Detection
-        ttk.Label(self.metrics_frame, text="🔍 Anomalies", 
+        ttk.Label(self.metrics_frame, text="🔍 Anomalies",
                  font=('Segoe UI', 11, 'bold')).pack(anchor='w', pady=(10, 5))
         ttk.Separator(self.metrics_frame, orient='horizontal').pack(fill='x', pady=5)
-        
+
         anomaly_status = "✅" if 5 <= m['anomaly_rate'] <= 15 else "⚠️"
-        ttk.Label(self.metrics_frame, 
+        ttk.Label(self.metrics_frame,
                  text=f"Detected: {m['anomaly_count']} ({m['anomaly_rate']:.1f}%) {anomaly_status}").pack(anchor='w', pady=(0, 10))
-        
+
         # Top Categories
-        ttk.Label(self.metrics_frame, text="📁 Top Categories", 
+        ttk.Label(self.metrics_frame, text="📁 Top Categories",
                  font=('Segoe UI', 11, 'bold')).pack(anchor='w', pady=(10, 5))
         ttk.Separator(self.metrics_frame, orient='horizontal').pack(fill='x', pady=5)
-        
+
         if m['categories']:
-            sorted_cats = sorted(m['categories'].items(), 
+            sorted_cats = sorted(m['categories'].items(),
                                key=lambda x: x[1]['total'], reverse=True)[:5]
             for cat, stats in sorted_cats:
                 pct = stats['delete'] / stats['total'] * 100 if stats['total'] > 0 else 0
-                ttk.Label(self.metrics_frame, 
+                ttk.Label(self.metrics_frame,
                          text=f"{cat}: {stats['total']} ({pct:.0f}% del)").pack(anchor='w')
-        
+
         # User Feedback
-        ttk.Label(self.metrics_frame, text="👤 Your Feedback", 
+        ttk.Label(self.metrics_frame, text="👤 Your Feedback",
                  font=('Segoe UI', 11, 'bold')).pack(anchor='w', pady=(15, 5))
         ttk.Separator(self.metrics_frame, orient='horizontal').pack(fill='x', pady=5)
-        
-        ttk.Label(self.metrics_frame, 
+
+        ttk.Label(self.metrics_frame,
                  text=f"Decisions: {m['feedback']['total_feedback']}").pack(anchor='w')
-        ttk.Label(self.metrics_frame, 
+        ttk.Label(self.metrics_frame,
                  text=f"Kept: {m['feedback']['files_kept']}").pack(anchor='w')
-        ttk.Label(self.metrics_frame, 
+        ttk.Label(self.metrics_frame,
                  text=f"Deleted: {m['feedback']['files_deleted']}").pack(anchor='w')
+
+        # Update scroll region after adding all widgets
+        self.metrics_frame.update_idletasks()
+        self.metrics_canvas.configure(scrollregion=self.metrics_canvas.bbox("all"))
     
     def _setup_actions(self):
         """Setup action buttons"""
@@ -402,10 +294,10 @@ class FilePurgeApp:
                   command=lambda: self.select_all('delete')).pack(side='left', padx=5)
         ttk.Button(action_frame, text="Select All KEEP", 
                   command=lambda: self.select_all('keep')).pack(side='left', padx=5)
-        ttk.Button(action_frame, text="Deselect All", 
+        ttk.Button(action_frame, text="Deselect All",
                   command=self.deselect_all).pack(side='left', padx=5)
-        ttk.Button(action_frame, text="Simulate Delete", 
-                  command=self.simulate_delete).pack(side='left', padx=5)
+        ttk.Button(action_frame, text="Delete Files",
+                  command=self.delete_files).pack(side='left', padx=5)
         ttk.Button(action_frame, text="Export Report", 
                   command=self.export_report).pack(side='left', padx=5)
         
@@ -451,14 +343,15 @@ class FilePurgeApp:
         
         self.scan_btn.config(state='disabled')
         self.cancel_btn.config(state='normal')
-        
-        # Clear both trees
-        for item in self.delete_tree.get_children():
-            self.delete_tree.delete(item)
-        for item in self.keep_tree.get_children():
-            self.keep_tree.delete(item)
-        
-        self.selected_indices = {'delete': set(), 'keep': set()}
+
+        # Clear both trees using tree_manager
+        for item in self.tree_manager.delete_tree.get_children():
+            self.tree_manager.delete_tree.delete(item)
+        for item in self.tree_manager.keep_tree.get_children():
+            self.tree_manager.keep_tree.delete(item)
+
+        # Clear selections
+        self.tree_manager.selected_indices = {'delete': set(), 'keep': set()}
         
         self.progress_var.set("Starting scan...")
         self.progress_bar.start()
@@ -521,35 +414,32 @@ class FilePurgeApp:
     def display_results(self):
         """Display scan results in side-by-side trees"""
         # Separate and store files
-        self.delete_files = [f for f in self.scan_results if f.get('recommend_delete')]
-        self.keep_files = [f for f in self.scan_results if not f.get('recommend_delete')]
-        
+        self.delete_files_list = [f for f in self.scan_results if f.get('recommend_delete')]
+        self.keep_files_list = [f for f in self.scan_results if not f.get('recommend_delete')]
+
         # Sort by confidence (default)
-        self.delete_files.sort(key=lambda x: x.get('confidence', 0), reverse=True)
-        self.keep_files.sort(key=lambda x: x.get('confidence', 0), reverse=True)
-        
+        self.delete_files_list.sort(key=lambda x: x.get('confidence', 0), reverse=True)
+        self.keep_files_list.sort(key=lambda x: x.get('confidence', 0), reverse=True)
+
         # Reset sort state
-        self.delete_sort_column = None
-        self.delete_sort_reverse = False
-        self.keep_sort_column = None
-        self.keep_sort_reverse = False
-        
-        # Populate trees
-        self._populate_tree(self.delete_tree, self.delete_files, 'delete')
-        self._populate_tree(self.keep_tree, self.keep_files, 'keep')
-        
+        self.tree_manager.reset_sort_state()
+
+        # Populate trees using TreeManager
+        self.tree_manager.populate_tree(self.tree_manager.delete_tree, self.delete_files_list, 'delete')
+        self.tree_manager.populate_tree(self.tree_manager.keep_tree, self.keep_files_list, 'keep')
+
         # Update metrics dashboard
         metrics = self._calculate_metrics()
         self._update_metrics_display(metrics)
-        
+
         # Update status bar
-        delete_count = len(self.delete_files)
-        total_size = sum(f.get('size_mb', 0) for f in self.delete_files)
-        
+        delete_count = len(self.delete_files_list)
+        total_size = sum(f.get('size_mb', 0) for f in self.delete_files_list)
+
         self.status_var.set(
             f"Found {len(self.scan_results)} files | "
             f"DELETE: {delete_count} ({total_size:.1f} MB) | "
-            f"KEEP: {len(self.keep_files)}"
+            f"KEEP: {len(self.keep_files_list)}"
         )
     
     def _calculate_metrics(self):
@@ -585,94 +475,36 @@ class FilePurgeApp:
         
         return metrics
     
-    def on_tree_click(self, event, tree_type):
-        """Handle tree click for selection"""
-        tree = self.delete_tree if tree_type == 'delete' else self.keep_tree
-        region = tree.identify('region', event.x, event.y)
-        
-        if region == 'tree':
-            item = tree.identify_row(event.y)
-            if item:
-                current_text = tree.item(item, 'text')
-                new_text = '☑' if current_text == '☐' else '☐'
-                tree.item(item, text=new_text)
-                
-                tags = tree.item(item, 'tags')
-                for tag in tags:
-                    if tag.isdigit():
-                        idx = int(tag)
-                        if new_text == '☑':
-                            self.selected_indices[tree_type].add(idx)
-                        else:
-                            self.selected_indices[tree_type].discard(idx)
-    
     def select_all(self, tree_type):
         """Select all in specified tree"""
-        tree = self.delete_tree if tree_type == 'delete' else self.keep_tree
-        self.selected_indices[tree_type].clear()
-        
-        for item in tree.get_children():
-            tree.item(item, text='☑')
-            tags = tree.item(item, 'tags')
-            for tag in tags:
-                if tag.isdigit():
-                    self.selected_indices[tree_type].add(int(tag))
-    
+        self.tree_manager.select_all(tree_type)
+
     def deselect_all(self):
         """Deselect all files"""
-        self.selected_indices = {'delete': set(), 'keep': set()}
-        
-        for item in self.delete_tree.get_children():
-            self.delete_tree.item(item, text='☐')
-        for item in self.keep_tree.get_children():
-            self.keep_tree.item(item, text='☐')
+        self.tree_manager.deselect_all()
     
-    def simulate_delete(self):
-        """Simulate file deletion"""
-        total_selected = len(self.selected_indices['delete']) + len(self.selected_indices['keep'])
-        
-        if total_selected == 0:
-            messagebox.showinfo("Info", "No files selected")
-            return
-        
-        response = messagebox.askyesno(
-            "Confirm Simulation",
-            f"Simulate deletion of {total_selected} files?\n\n"
-            "Note: Files will NOT actually be deleted (simulation mode).\n"
-            "Your choices will be recorded to improve recommendations."
+    def delete_files(self):
+        """Delete selected files using FileOperationsHandler"""
+        # Perform deletion using FileOperationsHandler
+        results = self.file_ops.delete_selected_files(
+            self.delete_files_list,
+            self.keep_files_list,
+            self.tree_manager.selected_indices
         )
-        
-        if not response:
+
+        # If cancelled, return early
+        if results.get('cancelled'):
             return
-        
-        # Record feedback
-        for idx in self.selected_indices['delete']:
-            if idx < len(self.delete_files):
-                self.recommender.record_choice(self.delete_files[idx], user_kept=False)
-        
-        for idx in self.selected_indices['keep']:
-            if idx < len(self.keep_files):
-                self.recommender.record_choice(self.keep_files[idx], user_kept=False)
-        
-        # Remove from trees
-        items_to_remove = []
-        for item in self.delete_tree.get_children():
-            if self.delete_tree.item(item, 'text') == '☑':
-                items_to_remove.append(item)
-        for item in items_to_remove:
-            self.delete_tree.delete(item)
-        
-        items_to_remove = []
-        for item in self.keep_tree.get_children():
-            if self.keep_tree.item(item, 'text') == '☑':
-                items_to_remove.append(item)
-        for item in items_to_remove:
-            self.keep_tree.delete(item)
-        
-        self.selected_indices = {'delete': set(), 'keep': set()}
-        messagebox.showinfo("Success",
-            f"Simulated deletion of {total_selected} files.\n"
-            "Feedback recorded for future recommendations.")
+
+        # Remove deleted files from trees using TreeManager
+        self.tree_manager.remove_deleted_files(
+            self.delete_files_list,
+            self.keep_files_list,
+            results.get('failed_files', [])
+        )
+
+        # Show results to user
+        self.file_ops.show_deletion_results(results)
     
     def export_report(self):
         """Export results to CSV"""

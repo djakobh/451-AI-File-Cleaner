@@ -39,13 +39,22 @@ def generate_test_files(base_dir="test_files", num_files=1000):
         'ancient': (731, 1825), # 2-5 years
     }
     
-    # Size profiles (KB)
+    # Size profiles (KB) - REDUCED for storage efficiency
     size_profiles = {
-        'tiny': (1, 100),           # 1-100 KB
-        'small': (100, 1024),       # 100KB-1MB
-        'medium': (1024, 10240),    # 1-10 MB
-        'large': (10240, 102400),   # 10-100 MB
-        'huge': (102400, 512000),   # 100-500 MB
+        'tiny': (1, 10),            # 1-10 KB (90% of files)
+        'small': (10, 50),          # 10-50 KB
+        'medium': (50, 200),        # 50-200 KB
+        'large': (200, 1024),       # 200KB-1MB
+        'huge': (1024, 5120),       # 1-5 MB (only a few)
+    }
+
+    # Weighted distribution: most files are small
+    size_weights = {
+        'tiny': 0.50,     # 50% tiny files
+        'small': 0.30,    # 30% small files
+        'medium': 0.15,   # 15% medium files
+        'large': 0.04,    # 4% large files
+        'huge': 0.01,     # 1% huge files
     }
     
     print(f"Generating {num_files} test files in {base_dir}/")
@@ -62,9 +71,13 @@ def generate_test_files(base_dir="test_files", num_files=1000):
         # Choose age
         age_profile = random.choice(list(age_profiles.keys()))
         days_ago = random.randint(*age_profiles[age_profile])
-        
-        # Choose size
-        size_profile = random.choice(list(size_profiles.keys()))
+
+        # Choose size using weighted distribution (most files are small)
+        size_profile = random.choices(
+            list(size_profiles.keys()),
+            weights=list(size_weights.values()),
+            k=1
+        )[0]
         size_kb = random.randint(*size_profiles[size_profile])
         
         # Create subdirectory structure (some files nested)
@@ -109,11 +122,11 @@ def generate_test_files(base_dir="test_files", num_files=1000):
             print(f"Error creating {filepath}: {e}")
     
     print("=" * 60)
-    print(f"✅ Successfully created {files_created} test files")
-    print(f"📁 Location: {base_path.absolute()}")
-    
+    print(f"[OK] Successfully created {files_created} test files")
+    print(f"Location: {base_path.absolute()}")
+
     # Generate summary
-    print("\n📊 Test Data Summary:")
+    print("\nTest Data Summary:")
     print("-" * 60)
     
     # Count files by category
@@ -125,22 +138,23 @@ def generate_test_files(base_dir="test_files", num_files=1000):
     total_size = sum(f.stat().st_size for f in base_path.rglob('*') if f.is_file())
     print(f"\n  Total Size: {total_size / (1024**3):.2f} GB")
     
-    print("\n🎯 Test Scenarios Covered:")
+    print("\nTest Scenarios Covered:")
     print("-" * 60)
-    print("  ✅ Various file ages (0 days to 5 years)")
-    print("  ✅ Different file sizes (1 KB to 500 MB)")
-    print("  ✅ Multiple file types (8 categories)")
-    print("  ✅ Nested directory structures (up to 3 levels)")
-    print("  ✅ Mix of disposable and important files")
-    
-    print("\n💡 Usage:")
+    print("  [OK] Various file ages (0 days to 5 years)")
+    print("  [OK] Different file sizes (1 KB to 5 MB, mostly small)")
+    print("  [OK] Multiple file types (8 categories)")
+    print("  [OK] Nested directory structures (up to 3 levels)")
+    print("  [OK] Mix of disposable and important files")
+    print("  [OK] Realistic size distribution (50% tiny, 30% small, 20% larger)")
+
+    print("\nUsage:")
     print("-" * 60)
     print(f"  1. Point the File Purge System to: {base_path.absolute()}")
     print(f"  2. Run a scan")
     print(f"  3. Verify deletion rate is 40-60%")
     print(f"  4. Check that old/disposable files are flagged")
-    
-    print("\n⚠️  To delete this test data:")
+
+    print("\n[!] To delete this test data:")
     print(f"  import shutil; shutil.rmtree('{base_dir}')")
 
 
@@ -149,21 +163,21 @@ def generate_specific_test_cases(base_dir="test_files_specific"):
     base_path = Path(base_dir)
     base_path.mkdir(exist_ok=True)
     
-    print(f"\n\n🧪 Generating Specific Test Cases in {base_dir}/")
+    print(f"\n\nGenerating Specific Test Cases in {base_dir}/")
     print("=" * 60)
     
     test_cases = [
         # (filename, size_kb, days_old, description)
-        ("recent_important.docx", 500, 1, "Recent document - should KEEP"),
-        ("old_disposable.tmp", 100, 400, "Old temp file - should DELETE"),
-        ("huge_old_file.zip", 500000, 800, "Huge old archive - should DELETE"),
+        ("recent_important.docx", 50, 1, "Recent document - should KEEP"),
+        ("old_disposable.tmp", 10, 400, "Old temp file - should DELETE"),
+        ("huge_old_file.zip", 5000, 800, "Huge old archive - should DELETE"),
         ("tiny_recent.txt", 1, 5, "Tiny recent file - should KEEP"),
-        ("log_file_ancient.log", 50, 1000, "Ancient log - should DELETE"),
-        ("project_file.py", 100, 30, "Recent code - should KEEP"),
-        ("backup_old.bak", 1000, 500, "Old backup - should DELETE"),
-        ("photo_vacation.jpg", 5000, 60, "Recent photo - should KEEP"),
-        ("cache_data.cache", 200, 200, "Old cache - should DELETE"),
-        ("important_doc.pdf", 2000, 90, "Important doc - should KEEP"),
+        ("log_file_ancient.log", 20, 1000, "Ancient log - should DELETE"),
+        ("project_file.py", 15, 30, "Recent code - should KEEP"),
+        ("backup_old.bak", 100, 500, "Old backup - should DELETE"),
+        ("photo_vacation.jpg", 200, 60, "Recent photo - should KEEP"),
+        ("cache_data.cache", 30, 200, "Old cache - should DELETE"),
+        ("important_doc.pdf", 80, 90, "Important doc - should KEEP"),
     ]
     
     for filename, size_kb, days_old, description in test_cases:
@@ -179,13 +193,13 @@ def generate_specific_test_cases(base_dir="test_files_specific"):
         timestamp = old_time.timestamp()
         os.utime(filepath, (timestamp, timestamp))
         
-        print(f"  ✅ {filename:<30} ({description})")
-    
-    print("\n💡 Use this folder to verify:")
+        print(f"  [OK] {filename:<30} ({description})")
+
+    print("\nUse this folder to verify:")
     print("  - Recent files are kept")
     print("  - Old disposable files are deleted")
     print("  - Large old files are flagged")
-    print(f"\n📁 Location: {base_path.absolute()}")
+    print(f"\nLocation: {base_path.absolute()}")
 
 
 if __name__ == "__main__":
@@ -208,5 +222,5 @@ if __name__ == "__main__":
     generate_specific_test_cases()
     
     print("\n" + "=" * 60)
-    print("✅ Test data generation complete!")
+    print("[OK] Test data generation complete!")
     print("=" * 60)
