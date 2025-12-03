@@ -23,8 +23,9 @@ CONFIG_DIR = BASE_DIR / "config"
 for dir_path in [DATA_DIR, MODELS_DIR, FEEDBACK_DIR, LOGS_DIR, CONFIG_DIR]:
     dir_path.mkdir(parents=True, exist_ok=True)
 
-# System Protection - FIXED: Added Adobe and application folders
+# System Protection - Cross-platform (Windows + macOS)
 SYSTEM_FOLDERS = {
+    # Windows System Folders
     'Windows',
     'System32',
     'SysWOW64',
@@ -37,7 +38,27 @@ SYSTEM_FOLDERS = {
     'System Volume Information',
     'WindowsApps',
     'WinSxS',
-    # Application folders (even if in Downloads)
+
+    # macOS System Folders (CRITICAL - DO NOT DELETE)
+    'System',
+    'Library',
+    'Applications',
+    'bin',
+    'sbin',
+    'usr',
+    'var',
+    'tmp',
+    'private',
+    'cores',
+    'dev',
+    'etc',
+    '.Trash',
+    '.fseventsd',
+    '.Spotlight-V100',
+    '.DocumentRevisions-V100',
+    '.TemporaryItems',
+
+    # Application folders (cross-platform)
     'Adobe',
     'Adobe Premiere Pro',
     'Adobe After Effects',
@@ -49,9 +70,24 @@ SYSTEM_FOLDERS = {
 }
 
 SYSTEM_PATHS_PARTIAL = {
+    # Windows paths
     'AppData\\Local\\Temp',
     'AppData\\Local\\Microsoft',
     'AppData\\Roaming\\Microsoft',
+
+    # macOS paths (using forward slash for cross-platform compatibility)
+    'Library/Application Support',
+    'Library/Caches',
+    'Library/Preferences',
+    'Library/LaunchAgents',
+    'Library/LaunchDaemons',
+    'Library/Frameworks',
+    '/System/',
+    '/Library/',
+    '/private/',
+    '/usr/',
+    '/bin/',
+    '/sbin/',
 }
 
 # Application-specific path patterns (for plugins, extensions, etc.)
@@ -254,24 +290,42 @@ def get_file_category(extension: str) -> str:
     return 'other'
 
 def is_system_protected(filepath: str) -> bool:
-    """Check if a file path is in a protected system location - FIXED"""
-    path_upper = filepath.upper()
-    
-    # Check full folder names
+    """Check if a file path is in a protected system location (cross-platform)"""
+    import os
+
+    # Normalize path separators for cross-platform compatibility
+    normalized_path = filepath.replace('\\', '/').upper()
+
+    # Check full folder names (both / and \ separators)
     for folder in SYSTEM_FOLDERS:
-        if f"\\{folder.upper()}\\" in path_upper or path_upper.startswith(f"{folder.upper()}\\"):
+        folder_upper = folder.upper()
+        # Check if folder is in path with separators on both sides
+        if f"/{folder_upper}/" in normalized_path:
             return True
-    
-    # Check partial paths
+        # Check if path starts with this folder
+        if normalized_path.startswith(f"{folder_upper}/") or normalized_path.startswith(f"/{folder_upper}/"):
+            return True
+        # Check for root-level paths (like /System, /Library on macOS)
+        if normalized_path.startswith(f"/{folder_upper}") and folder_upper in {'SYSTEM', 'LIBRARY', 'BIN', 'SBIN', 'USR', 'VAR', 'PRIVATE', 'DEV', 'ETC'}:
+            return True
+        # Special case for paths with special characters like $Recycle.Bin
+        if folder_upper in normalized_path:
+            # Check if it's a directory component (not just substring)
+            path_parts = normalized_path.split('/')
+            if any(folder_upper in part for part in path_parts):
+                return True
+
+    # Check partial paths (normalize these too)
     for partial in SYSTEM_PATHS_PARTIAL:
-        if partial.upper() in path_upper:
+        partial_normalized = partial.replace('\\', '/').upper()
+        if partial_normalized in normalized_path:
             return True
-    
-    # FIXED: Check for application-specific folders (plugins, etc.)
+
+    # Check for application-specific folders (plugins, etc.)
     for app_path in APPLICATION_PATHS:
-        if app_path.upper() in path_upper:
+        if app_path.upper() in normalized_path:
             return True
-    
+
     return False
 
 def is_disposable_extension(extension: str) -> bool:

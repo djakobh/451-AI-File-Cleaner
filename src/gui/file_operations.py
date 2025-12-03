@@ -152,12 +152,15 @@ class FileOperationsHandler:
                 files_to_delete.append(keep_files_list[idx])
                 total_size_mb += keep_files_list[idx].get('size_mb', 0)
 
-        # Show confirmation dialog
+        # Show confirmation dialog (platform-aware messaging)
+        import platform
+        trash_name = "Trash" if platform.system() == 'Darwin' else "Recycle Bin"
+
         response = messagebox.askyesnocancel(
             "⚠️ Confirm File Deletion",
             f"DELETE {total_selected} files ({total_size_mb:.2f} MB)?\n\n"
             "⚠️ WARNING: This will PERMANENTLY delete the selected files!\n\n"
-            "• Click YES to move files to Recycle Bin (recommended)\n"
+            f"• Click YES to move files to {trash_name} (recommended)\n"
             "• Click NO to permanently delete (cannot be recovered)\n"
             "• Click CANCEL to abort\n\n"
             "Are you sure you want to continue?"
@@ -232,7 +235,9 @@ class FileOperationsHandler:
                 ("\n..." if len(results['failed_files']) > 10 else "")
             )
         else:
-            deletion_type = "moved to Recycle Bin" if results['use_recycle_bin'] else "permanently deleted"
+            import platform
+            trash_name = "Trash" if platform.system() == 'Darwin' else "Recycle Bin"
+            deletion_type = f"moved to {trash_name}" if results['use_recycle_bin'] else "permanently deleted"
             messagebox.showinfo(
                 "✅ Deletion Successful",
                 f"Successfully {deletion_type}:\n"

@@ -7,7 +7,8 @@ An intelligent file management system using machine learning to identify unneces
 -  **ML Classification** - Random Forest algorithm (87% accuracy)
 -  **Anomaly Detection** - Identifies unusual/forgotten files
 -  **Learning System** - Adapts to your preferences over time
--  **Safety First** - System folder protection + simulation mode
+-  **Cross-Platform** - Works on Windows, macOS, and Linux
+-  **Safety First** - System folder protection + Trash/Recycle Bin support
 -  **Privacy** - Never accesses file content, only metadata
 
 ## Quick Start
@@ -59,7 +60,7 @@ File Scan → Feature Extraction → ML Prediction → User Review → Learning
 ✅ Never reads file contents
 ✅ No data sent to external servers
 ✅ Automatic system folder protection
-✅ Recycle Bin support (files can be recovered)
+✅ Cross-platform: Windows Recycle Bin / macOS Trash support (files can be recovered)
 ⚠️ Permanent deletion option available (use with caution)
 
 ## Project Structure

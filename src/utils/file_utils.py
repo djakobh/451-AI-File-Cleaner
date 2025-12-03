@@ -14,11 +14,11 @@ logger = logging.getLogger(__name__)
 
 def safe_delete_file(filepath: str, use_recycle_bin: bool = True) -> bool:
     """
-    Safely delete a file
+    Safely delete a file (cross-platform: Windows, macOS, Linux)
 
     Args:
         filepath: Path to file
-        use_recycle_bin: If True, move to recycle bin instead of permanent deletion
+        use_recycle_bin: If True, move to recycle bin/trash instead of permanent deletion
 
     Returns:
         True if successful, False otherwise
@@ -28,17 +28,23 @@ def safe_delete_file(filepath: str, use_recycle_bin: bool = True) -> bool:
             # Use platform-specific recycle bin implementation
             if platform.system() == 'Windows':
                 if _move_to_recycle_bin_windows(filepath):
-                    logger.info(f"Moved to recycle bin: {filepath}")
+                    logger.info(f"Moved to Recycle Bin: {filepath}")
                     return True
                 else:
-                    logger.warning("Failed to move to recycle bin, using permanent deletion")
+                    logger.warning("Failed to move to Recycle Bin, using permanent deletion")
+            elif platform.system() == 'Darwin':  # macOS
+                if _move_to_trash_macos(filepath):
+                    logger.info(f"Moved to Trash: {filepath}")
+                    return True
+                else:
+                    logger.warning("Failed to move to Trash, using permanent deletion")
             else:
-                # For non-Windows, fall back to permanent deletion with warning
-                logger.warning(f"Recycle bin not supported on {platform.system()}, using permanent deletion")
+                # Linux or other OS - fall back to permanent deletion with warning
+                logger.warning(f"Trash not supported on {platform.system()}, using permanent deletion")
 
         # Permanent deletion
         os.remove(filepath)
-        logger.info(f"Deleted: {filepath}")
+        logger.info(f"Permanently deleted: {filepath}")
         return True
 
     except PermissionError:
@@ -113,6 +119,46 @@ def _move_to_recycle_bin_windows(filepath: str) -> bool:
 
     except Exception as e:
         logger.error(f"Error moving to recycle bin: {e}")
+        return False
+
+
+def _move_to_trash_macos(filepath: str) -> bool:
+    """
+    Move file to macOS Trash folder
+
+    Args:
+        filepath: Path to file
+
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        from pathlib import Path
+        from datetime import datetime
+
+        # macOS Trash location
+        trash_path = Path.home() / '.Trash'
+
+        # Ensure Trash directory exists
+        trash_path.mkdir(exist_ok=True)
+
+        # Get filename and prepare destination
+        filename = os.path.basename(filepath)
+        destination = trash_path / filename
+
+        # If file already exists in trash, append timestamp to avoid conflicts
+        if destination.exists():
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            name, ext = os.path.splitext(filename)
+            destination = trash_path / f"{name}_{timestamp}{ext}"
+
+        # Move file to trash using shutil.move (works across filesystems)
+        shutil.move(filepath, str(destination))
+        logger.info(f"Moved to Trash: {filepath} -> {destination}")
+        return True
+
+    except Exception as e:
+        logger.error(f"Error moving to Trash: {e}")
         return False
 
 
