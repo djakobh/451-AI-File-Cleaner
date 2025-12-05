@@ -1,11 +1,6 @@
-"""
-Machine Learning classifier for file importance prediction - FIXED BALANCED VERSION
-"""
-
 import numpy as np
 import pickle
 from pathlib import Path
-from typing import List, Dict, Tuple, Optional
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 import logging
@@ -17,101 +12,68 @@ logger = logging.getLogger(__name__)
 
 
 class MLClassifier:
-    """Random Forest classifier for predicting file importance"""
-    
     def __init__(self):
         self.model = RandomForestClassifier(**ML_CONFIG['random_forest'])
         self.feature_engineer = FeatureEngineer()
-        self.is_trained = False
+        self.trained = False
         self.model_path = MODELS_DIR / 'rf_classifier.pkl'
-        self.feature_engineer_path = MODELS_DIR / 'feature_engineer.pkl'
-        
-        # Try to load existing model
+        self.feat_eng_path = MODELS_DIR / 'feature_engineer.pkl'
         self.load_model()
-    
-    def generate_synthetic_data(self, n_samples: int = None) -> Tuple[List[Dict], np.ndarray]:
-        """
-        Generate synthetic training data - FIXED BALANCED for 40-60% deletion
-        
-        Args:
-            n_samples: Number of samples to generate
-            
-        Returns:
-            Tuple of (file_data, labels)
-        """
+
+    def generate_synthetic_data(self, n_samples=None):
         if n_samples is None:
             n_samples = ML_CONFIG['synthetic_samples']
-        
+
         logger.info(f"Generating {n_samples} synthetic training samples")
-        
         np.random.seed(42)
-        synthetic_data = []
+        data = []
         labels = []
-        
+
         for i in range(n_samples):
-            # Generate realistic file characteristics
-            # FIXED: Even MORE aggressive - 70% old files, 30% recent
             size_mb = np.random.lognormal(0, 2)
-            created_days = np.random.uniform(150, 1500)  # Older files (was 100-1200)
-            
-            # FIXED: 70% chance of being OLD (>180 days), 30% chance of being recent
-            if np.random.random() < 0.70:  # 70% old files (was 60%)
-                accessed_days = np.random.uniform(200, created_days)  # Old (was 180)
-            else:  # 30% recent files (was 40%)
-                accessed_days = np.random.uniform(0, 150)  # Recent
-            
-            modified_days = np.random.uniform(accessed_days, created_days)
-            
-            # FIXED: Increase disposable files from 40% to 45%
-            is_disposable = np.random.choice([True, False], p=[0.45, 0.55])
-            is_hidden = np.random.choice([True, False], p=[0.10, 0.90])  # More hidden files
-            
-            depth = int(np.random.exponential(3) + 2)
-            
-            # === BALANCED Labeling for 45-50% deletion ===
-            label = 1  # Start with KEEP
-            
-            delete_score = 0
-            keep_score = 0
-            
-            # KEEP signals (reduced bonuses)
-            if accessed_days < 60:  # Used in last 2 months
-                keep_score += 2
-            
-            if accessed_days < 180:  # Used in last 6 months
-                keep_score += 1
-            
-            # DELETE signals (increased penalties)
-            if is_disposable:
-                delete_score += 2
-            
-            if accessed_days > 270:  # Not used in 9 months
-                delete_score += 3
-            
-            if accessed_days > 540:  # Not used in 18 months
-                delete_score += 2  # Extra penalty
-            
-            if size_mb > 150 and accessed_days > 180:  # Large (150MB+) and 6 months old
-                delete_score += 2
-            
-            if size_mb > 50 and accessed_days > 365:  # Medium (50MB+) and 1 year old
-                delete_score += 1
-            
-            if modified_days > 540:  # Over 18 months old
-                delete_score += 1
-            
-            if is_hidden and accessed_days > 270:  # Hidden and 9 months old
-                delete_score += 1
-            
-            # Lower threshold for more deletions
-            net_score = delete_score - keep_score
-            if net_score >= 2:  # Lowered from 3 to 2 for more deletions
-                label = 0  # DELETE
+            created_days = np.random.uniform(150, 1500)
+
+            if np.random.random() < 0.70:
+                accessed_days = np.random.uniform(200, created_days)
             else:
-                label = 1  # KEEP
-            
-            # Create synthetic file metadata
-            file_metadata = {
+                accessed_days = np.random.uniform(0, 150)
+
+            modified_days = np.random.uniform(accessed_days, created_days)
+            is_disposable = np.random.choice([True, False], p=[0.45, 0.55])
+            is_hidden = np.random.choice([True, False], p=[0.10, 0.90])
+            depth = int(np.random.exponential(3) + 2)
+
+            label = 1
+            del_score = 0
+            keep_score = 0
+
+            if accessed_days < 60:
+                keep_score += 2
+            if accessed_days < 180:
+                keep_score += 1
+
+            if is_disposable:
+                del_score += 2
+            if accessed_days > 270:
+                del_score += 3
+            if accessed_days > 540:
+                del_score += 2
+            if size_mb > 150 and accessed_days > 180:
+                del_score += 2
+            if size_mb > 50 and accessed_days > 365:
+                del_score += 1
+            if modified_days > 540:
+                del_score += 1
+            if is_hidden and accessed_days > 270:
+                del_score += 1
+
+            net = del_score - keep_score
+            if net >= 2:
+                label = 0
+            else:
+                label = 1
+
+            file_meta = {
                 'size_mb': size_mb,
                 'size_bytes': size_mb * 1024 * 1024,
                 'size_kb': size_mb * 1024,
@@ -131,34 +93,30 @@ class MLClassifier:
                 'extension': 'tmp' if is_disposable else np.random.choice(['pdf', 'docx', 'jpg', 'mp4', 'mp3', 'zip', 'avi']),
                 'category': 'disposable' if is_disposable else np.random.choice(['documents', 'images', 'videos', 'audio', 'archives']),
             }
-            
-            synthetic_data.append(file_metadata)
+
+            data.append(file_meta)
             labels.append(label)
-        
-        # Fine-tune the balance to hit 50% KEEP / 50% DELETE
+
         labels = np.array(labels)
-        delete_count = np.sum(labels == 0)
-        keep_count = np.sum(labels == 1)
-        
-        current_delete_ratio = delete_count / len(labels)
-        target_delete_ratio = 0.50
-        
-        logger.info(f"Initial distribution: {keep_count} KEEP ({keep_count/len(labels)*100:.1f}%), "
-                   f"{delete_count} DELETE ({delete_count/len(labels)*100:.1f}%)")
-        
-        # Adjust if needed
-        if current_delete_ratio < target_delete_ratio - 0.05:
-            # Need more DELETEs - add some old/disposable files
-            n_extra_deletes = int((target_delete_ratio * len(labels)) - delete_count)
-            
-            for i in range(n_extra_deletes):
-                # Create clearly deletable files
-                size_mb = np.random.lognormal(1, 2)  # Larger files
-                accessed_days = np.random.uniform(200, 1500)  # Old (reduced from 250)
+        del_cnt = np.sum(labels == 0)
+        keep_cnt = np.sum(labels == 1)
+
+        curr_del_ratio = del_cnt / len(labels)
+        target_del = 0.50
+
+        logger.info(f"Initial: {keep_cnt} KEEP ({keep_cnt/len(labels)*100:.1f}%), "
+                   f"{del_cnt} DELETE ({del_cnt/len(labels)*100:.1f}%)")
+
+        if curr_del_ratio < target_del - 0.05:
+            n_extra = int((target_del * len(labels)) - del_cnt)
+
+            for i in range(n_extra):
+                size_mb = np.random.lognormal(1, 2)
+                accessed_days = np.random.uniform(200, 1500)
                 modified_days = accessed_days + np.random.uniform(0, 200)
                 created_days = modified_days + np.random.uniform(0, 200)
-                
-                file_metadata = {
+
+                file_meta = {
                     'size_mb': size_mb,
                     'size_bytes': size_mb * 1024 * 1024,
                     'size_kb': size_mb * 1024,
@@ -178,22 +136,20 @@ class MLClassifier:
                     'extension': np.random.choice(['tmp', 'cache', 'bak', 'log', 'old']),
                     'category': 'disposable',
                 }
-                
-                synthetic_data.append(file_metadata)
+
+                data.append(file_meta)
                 labels = np.append(labels, 0)
-        
-        elif current_delete_ratio > target_delete_ratio + 0.05:
-            # Need more KEEPs - add some recent/valuable files
-            n_extra_keeps = int(keep_count - (len(labels) - target_delete_ratio * len(labels)))
-            
-            for i in range(n_extra_keeps):
-                # Create clearly keepable files
+
+        elif curr_del_ratio > target_del + 0.05:
+            n_extra = int(keep_cnt - (len(labels) - target_del * len(labels)))
+
+            for i in range(n_extra):
                 size_mb = np.random.lognormal(0, 1.5)
-                accessed_days = np.random.uniform(0, 120)  # Recent
+                accessed_days = np.random.uniform(0, 120)
                 modified_days = accessed_days + np.random.uniform(0, 100)
                 created_days = modified_days + np.random.uniform(0, 200)
-                
-                file_metadata = {
+
+                file_meta = {
                     'size_mb': size_mb,
                     'size_bytes': size_mb * 1024 * 1024,
                     'size_kb': size_mb * 1024,
@@ -213,128 +169,116 @@ class MLClassifier:
                     'extension': np.random.choice(['pdf', 'docx', 'jpg', 'png', 'mp4', 'mp3']),
                     'category': np.random.choice(['documents', 'images', 'videos', 'audio']),
                 }
-                
-                synthetic_data.append(file_metadata)
+
+                data.append(file_meta)
                 labels = np.append(labels, 1)
-        
-        final_delete_count = np.sum(labels == 0)
-        final_keep_count = np.sum(labels == 1)
-        
-        logger.info(f"Final synthetic data: {final_keep_count} KEEP ({final_keep_count/len(labels)*100:.1f}%), "
-                   f"{final_delete_count} DELETE ({final_delete_count/len(labels)*100:.1f}%)")
-        
-        return synthetic_data, labels
-    
-    def train(self, file_data: Optional[List[Dict]] = None, labels: Optional[np.ndarray] = None):
-        """Train the classifier"""
+
+        final_del = np.sum(labels == 0)
+        final_keep = np.sum(labels == 1)
+
+        logger.info(f"Final: {final_keep} KEEP ({final_keep/len(labels)*100:.1f}%), "
+                   f"{final_del} DELETE ({final_del/len(labels)*100:.1f}%)")
+
+        return data, labels
+
+    def train(self, file_data=None, labels=None):
         logger.info("Training ML classifier...")
-        
+
         if file_data is None or labels is None:
             file_data, labels = self.generate_synthetic_data()
-        
+
         features = self.feature_engineer.prepare_features(file_data, fit=True)
         X_scaled = self.feature_engineer.scale_features(features, fit=True)
-        
+
         self.model.fit(X_scaled, labels)
-        self.is_trained = True
-        
-        train_accuracy = self.model.score(X_scaled, labels)
-        logger.info(f"Training complete. Accuracy: {train_accuracy:.2%}")
-        
+        self.trained = True
+
+        acc = self.model.score(X_scaled, labels)
+        logger.info(f"Training complete. Accuracy: {acc:.2%}")
+
         if hasattr(self.model, 'feature_importances_'):
-            feature_names = self.feature_engineer.get_feature_importance_names()
+            feat_names = self.feature_engineer.get_feature_importance_names()
             importances = self.model.feature_importances_
-            
-            top_indices = np.argsort(importances)[-10:][::-1]
+
+            top_idx = np.argsort(importances)[-10:][::-1]
             logger.info("Top 10 important features:")
-            for idx in top_indices:
-                if idx < len(feature_names):
-                    logger.info(f"  {feature_names[idx]}: {importances[idx]:.4f}")
-        
+            for idx in top_idx:
+                if idx < len(feat_names):
+                    logger.info(f"  {feat_names[idx]}: {importances[idx]:.4f}")
+
         self.save_model()
-    
-    def predict(self, file_data: List[Dict]) -> Tuple[np.ndarray, np.ndarray]:
-        """Predict file importance"""
-        if not self.is_trained:
-            logger.warning("Model not trained, training on synthetic data now")
+
+    def predict(self, file_data):
+        if not self.trained:
+            logger.warning("Model not trained, training now")
             self.train()
-        
+
         if not file_data:
             return np.array([]), np.array([])
-        
+
         features = self.feature_engineer.prepare_features(file_data, fit=False)
         X_scaled = self.feature_engineer.scale_features(features, fit=False)
-        
-        predictions = self.model.predict(X_scaled)
-        probabilities = self.model.predict_proba(X_scaled)
-        
-        logger.debug(f"Predicted {len(predictions)} files: "
-                    f"{sum(predictions)} KEEP, {len(predictions) - sum(predictions)} DELETE")
-        
-        return predictions, probabilities
-    
-    def predict_single(self, file_metadata: Dict) -> Tuple[int, float]:
-        """Predict importance for a single file"""
-        predictions, probabilities = self.predict([file_metadata])
-        
-        if len(predictions) > 0:
-            pred = int(predictions[0])
-            confidence = float(probabilities[0][pred])
-            return pred, confidence
-        
+
+        preds = self.model.predict(X_scaled)
+        probs = self.model.predict_proba(X_scaled)
+
+        logger.debug(f"Predicted {len(preds)} files: {sum(preds)} KEEP, {len(preds) - sum(preds)} DELETE")
+
+        return preds, probs
+
+    def predict_single(self, file_meta):
+        preds, probs = self.predict([file_meta])
+
+        if len(preds) > 0:
+            pred = int(preds[0])
+            conf = float(probs[0][pred])
+            return pred, conf
+
         return 1, 0.5
-    
+
     def save_model(self):
-        """Save trained model and feature engineer"""
-        if not self.is_trained:
+        if not self.trained:
             logger.warning("Cannot save untrained model")
             return
-        
+
         try:
             with open(self.model_path, 'wb') as f:
                 pickle.dump(self.model, f)
-            
-            with open(self.feature_engineer_path, 'wb') as f:
+            with open(self.feat_eng_path, 'wb') as f:
                 pickle.dump(self.feature_engineer, f)
-            
             logger.info(f"Model saved to {self.model_path}")
-        
         except Exception as e:
             logger.error(f"Error saving model: {e}")
-    
-    def load_model(self) -> bool:
-        """Load trained model and feature engineer"""
-        if not self.model_path.exists() or not self.feature_engineer_path.exists():
+
+    def load_model(self):
+        if not self.model_path.exists() or not self.feat_eng_path.exists():
             logger.debug("No saved model found")
             return False
-        
+
         try:
             with open(self.model_path, 'rb') as f:
                 self.model = pickle.load(f)
-            
-            with open(self.feature_engineer_path, 'rb') as f:
+            with open(self.feat_eng_path, 'rb') as f:
                 self.feature_engineer = pickle.load(f)
-            
-            self.is_trained = True
+
+            self.trained = True
             logger.info(f"Model loaded from {self.model_path}")
             return True
-        
         except Exception as e:
             logger.error(f"Error loading model: {e}")
             return False
-    
-    def evaluate(self, test_data: List[Dict], test_labels: np.ndarray) -> Dict:
-        """Evaluate model performance"""
-        predictions, probabilities = self.predict(test_data)
-        
+
+    def evaluate(self, test_data, test_labels):
+        preds, probs = self.predict(test_data)
+
         from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
-        
+
         metrics = {
-            'accuracy': accuracy_score(test_labels, predictions),
-            'precision': precision_score(test_labels, predictions, zero_division=0),
-            'recall': recall_score(test_labels, predictions, zero_division=0),
-            'f1_score': f1_score(test_labels, predictions, zero_division=0),
+            'accuracy': accuracy_score(test_labels, preds),
+            'precision': precision_score(test_labels, preds, zero_division=0),
+            'recall': recall_score(test_labels, preds, zero_division=0),
+            'f1_score': f1_score(test_labels, preds, zero_division=0),
         }
-        
+
         logger.info(f"Evaluation metrics: {metrics}")
         return metrics

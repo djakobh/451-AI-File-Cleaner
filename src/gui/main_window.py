@@ -80,15 +80,15 @@ class FilePurgeApp:
         self._setup_results(results_container)
         
         # Right side: Metrics Dashboard (30% width)
-        metrics_container = ttk.LabelFrame(main_container, text="📊 Model Metrics", padding=10)
+        metrics_container = ttk.LabelFrame(main_container, text="Model Metrics", padding=10)
         metrics_container.pack(side='right', fill='both', padx=(10, 0))
         self._setup_metrics_dashboard(metrics_container)
         
         # Action Panel
         self._setup_actions()
-        
-        # Menu Bar
-        self._setup_menu()
+
+        # Menu Bar (disabled)
+        # self._setup_menu()
     
     def _setup_controls(self):
         """Setup control panel"""
@@ -199,7 +199,7 @@ class FilePurgeApp:
         m = metrics
 
         # Overall Statistics
-        ttk.Label(self.metrics_frame, text="📊 Overall Statistics",
+        ttk.Label(self.metrics_frame, text="Overall Statistics",
                  font=('Segoe UI', 11, 'bold')).pack(anchor='w', pady=(0, 5))
         ttk.Separator(self.metrics_frame, orient='horizontal').pack(fill='x', pady=5)
 
@@ -209,28 +209,28 @@ class FilePurgeApp:
 
         # Status indicator
         if 40 <= m['deletion_rate'] <= 60:
-            status_text = "✅ Balanced"
+            status_text = "[OK] Balanced"
             status_color = "green"
         elif m['deletion_rate'] > 70:
-            status_text = "⚠️ High"
+            status_text = "[!] High"
             status_color = "orange"
         elif m['deletion_rate'] < 30:
-            status_text = "⚠️ Low"
+            status_text = "[!] Low"
             status_color = "orange"
         else:
-            status_text = "✓ OK"
+            status_text = "[OK]"
             status_color = "blue"
 
         ttk.Label(self.metrics_frame, text=f"Status: {status_text}",
                  foreground=status_color).pack(anchor='w', pady=(5, 10))
 
         # Confidence Metrics
-        ttk.Label(self.metrics_frame, text="🎯 Confidence",
+        ttk.Label(self.metrics_frame, text="Confidence",
                  font=('Segoe UI', 11, 'bold')).pack(anchor='w', pady=(10, 5))
         ttk.Separator(self.metrics_frame, orient='horizontal').pack(fill='x', pady=5)
 
-        delete_conf_status = "✅" if m['avg_delete_conf'] > 0.70 else "⚠️"
-        keep_conf_status = "✅" if m['avg_keep_conf'] > 0.65 else "⚠️"
+        delete_conf_status = "[OK]" if m['avg_delete_conf'] > 0.70 else "[!]"
+        keep_conf_status = "[OK]" if m['avg_keep_conf'] > 0.65 else "[!]"
 
         ttk.Label(self.metrics_frame,
                  text=f"DELETE: {m['avg_delete_conf']:.1%} {delete_conf_status}").pack(anchor='w')
@@ -238,7 +238,7 @@ class FilePurgeApp:
                  text=f"KEEP: {m['avg_keep_conf']:.1%} {keep_conf_status}").pack(anchor='w', pady=(0, 10))
 
         # Storage Impact
-        ttk.Label(self.metrics_frame, text="💾 Storage Impact",
+        ttk.Label(self.metrics_frame, text="Storage Impact",
                  font=('Segoe UI', 11, 'bold')).pack(anchor='w', pady=(10, 5))
         ttk.Separator(self.metrics_frame, orient='horizontal').pack(fill='x', pady=5)
 
@@ -248,16 +248,16 @@ class FilePurgeApp:
                  text=f"To Keep: {m['total_size_gb']-m['delete_size_gb']:.2f} GB").pack(anchor='w', pady=(0, 10))
 
         # Anomaly Detection
-        ttk.Label(self.metrics_frame, text="🔍 Anomalies",
+        ttk.Label(self.metrics_frame, text="Anomalies",
                  font=('Segoe UI', 11, 'bold')).pack(anchor='w', pady=(10, 5))
         ttk.Separator(self.metrics_frame, orient='horizontal').pack(fill='x', pady=5)
 
-        anomaly_status = "✅" if 5 <= m['anomaly_rate'] <= 15 else "⚠️"
+        anomaly_status = "[OK]" if 5 <= m['anomaly_rate'] <= 15 else "[!]"
         ttk.Label(self.metrics_frame,
                  text=f"Detected: {m['anomaly_count']} ({m['anomaly_rate']:.1f}%) {anomaly_status}").pack(anchor='w', pady=(0, 10))
 
         # Top Categories
-        ttk.Label(self.metrics_frame, text="📁 Top Categories",
+        ttk.Label(self.metrics_frame, text="Top Categories",
                  font=('Segoe UI', 11, 'bold')).pack(anchor='w', pady=(10, 5))
         ttk.Separator(self.metrics_frame, orient='horizontal').pack(fill='x', pady=5)
 
@@ -270,7 +270,7 @@ class FilePurgeApp:
                          text=f"{cat}: {stats['total']} ({pct:.0f}% del)").pack(anchor='w')
 
         # User Feedback
-        ttk.Label(self.metrics_frame, text="👤 Your Feedback",
+        ttk.Label(self.metrics_frame, text="Your Feedback",
                  font=('Segoe UI', 11, 'bold')).pack(anchor='w', pady=(15, 5))
         ttk.Separator(self.metrics_frame, orient='horizontal').pack(fill='x', pady=5)
 
@@ -374,7 +374,7 @@ class FilePurgeApp:
                     f"Scanned {count} files... {status[:50]}"
                 ))
             
-            self.scan_results = self.scanner.scan(path, max_files=5000, progress_callback=update_progress)
+            self.scan_results = self.scanner.scan(path, max_files=5000, progress_cb=update_progress)
             
             if not self.scan_results:
                 self.root.after(0, lambda: messagebox.showinfo("Info", "No files found or scan cancelled"))

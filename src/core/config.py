@@ -1,11 +1,7 @@
-"""
-Configuration constants and settings for the File Purge System
-"""
-
 import os
 from pathlib import Path
 
-# Application Info
+# App info
 APP_NAME = "AI File Purge System"
 APP_VERSION = "1.0.0"
 TEAM_NAME = "Team 13"
@@ -19,99 +15,37 @@ FEEDBACK_DIR = DATA_DIR / "feedback"
 LOGS_DIR = DATA_DIR / "logs"
 CONFIG_DIR = BASE_DIR / "config"
 
-# Create directories if they don't exist
 for dir_path in [DATA_DIR, MODELS_DIR, FEEDBACK_DIR, LOGS_DIR, CONFIG_DIR]:
     dir_path.mkdir(parents=True, exist_ok=True)
 
-# System Protection - Cross-platform (Windows + macOS)
+# System folders we should never delete
 SYSTEM_FOLDERS = {
-    # Windows System Folders
-    'Windows',
-    'System32',
-    'SysWOW64',
-    'Program Files',
-    'Program Files (x86)',
-    'ProgramData',
-    'Boot',
-    'Recovery',
-    '$Recycle.Bin',
-    'System Volume Information',
-    'WindowsApps',
-    'WinSxS',
-
-    # macOS System Folders (CRITICAL - DO NOT DELETE)
-    'System',
-    'Library',
-    'Applications',
-    'bin',
-    'sbin',
-    'usr',
-    'var',
-    'tmp',
-    'private',
-    'cores',
-    'dev',
-    'etc',
-    '.Trash',
-    '.fseventsd',
-    '.Spotlight-V100',
-    '.DocumentRevisions-V100',
-    '.TemporaryItems',
-
-    # Application folders (cross-platform)
-    'Adobe',
-    'Adobe Premiere Pro',
-    'Adobe After Effects',
-    'Adobe Photoshop',
-    'node_modules',
-    'Python',
-    '.venv',
-    'venv',
+    'Windows', 'System32', 'SysWOW64', 'Program Files', 'Program Files (x86)',
+    'ProgramData', 'Boot', 'Recovery', '$Recycle.Bin', 'System Volume Information',
+    'WindowsApps', 'WinSxS',
+    'System', 'Library', 'Applications', 'bin', 'sbin', 'usr', 'var', 'tmp',
+    'private', 'cores', 'dev', 'etc', '.Trash', '.fseventsd', '.Spotlight-V100',
+    '.DocumentRevisions-V100', '.TemporaryItems',
+    'Adobe', 'Adobe Premiere Pro', 'Adobe After Effects', 'Adobe Photoshop',
+    'node_modules', 'Python', '.venv', 'venv',
 }
 
 SYSTEM_PATHS_PARTIAL = {
-    # Windows paths
-    'AppData\\Local\\Temp',
-    'AppData\\Local\\Microsoft',
-    'AppData\\Roaming\\Microsoft',
-
-    # macOS paths (using forward slash for cross-platform compatibility)
-    'Library/Application Support',
-    'Library/Caches',
-    'Library/Preferences',
-    'Library/LaunchAgents',
-    'Library/LaunchDaemons',
-    'Library/Frameworks',
-    '/System/',
-    '/Library/',
-    '/private/',
-    '/usr/',
-    '/bin/',
-    '/sbin/',
+    'AppData\\Local\\Temp', 'AppData\\Local\\Microsoft', 'AppData\\Roaming\\Microsoft',
+    'Library/Application Support', 'Library/Caches', 'Library/Preferences',
+    'Library/LaunchAgents', 'Library/LaunchDaemons', 'Library/Frameworks',
+    '/System/', '/Library/', '/private/', '/usr/', '/bin/', '/sbin/',
 }
 
-# Application-specific path patterns (for plugins, extensions, etc.)
 APPLICATION_PATHS = {
-    'Plug-Ins',
-    'Plugins',
-    'Extensions',
-    'Add-ons',
-    'Addons',
-    'Common Files',
+    'Plug-Ins', 'Plugins', 'Extensions', 'Add-ons', 'Addons', 'Common Files',
 }
 
-# File Extensions
+# File extension categories
 DISPOSABLE_EXTENSIONS = {
-    # Temporary files
-    'tmp', 'temp', 'cache', 'bak', 'old', 'backup',
-    # Download fragments
-    'download', 'part', 'crdownload', 'partial',
-    # System files
-    'log', 'dmp', 'chk', 'gid',
-    # Compilation artifacts
-    'o', 'obj', 'pyc', 'pyo', 'class',
-    # Backup files
-    '~', 'bak', 'swp', 'swo',
+    'tmp', 'temp', 'cache', 'bak', 'old', 'backup', 'download', 'part',
+    'crdownload', 'partial', 'log', 'dmp', 'chk', 'gid', 'o', 'obj',
+    'pyc', 'pyo', 'class', '~', 'swp', 'swo',
 }
 
 DOCUMENT_EXTENSIONS = {
@@ -143,51 +77,29 @@ EXECUTABLE_EXTENSIONS = {
     'exe', 'msi', 'bat', 'cmd', 'com', 'scr', 'dll', 'sys',
 }
 
-# FIXED: Added specialized file extensions
-# Adobe Creative Suite extensions
 ADOBE_EXTENSIONS = {
-    'aex',     # After Effects plugin
-    'epr',     # Premiere preset
-    'prproj',  # Premiere project
-    'aep',     # After Effects project
-    'psb',     # Photoshop large document
-    'ffx',     # Final Cut effect
-    'mogrt',   # Motion graphics template
-    'plb',     # Premiere library
-    'zdct',    # Adobe preset
+    'aex', 'epr', 'prproj', 'aep', 'psb', 'ffx', 'mogrt', 'plb', 'zdct',
 }
 
-# Development/Code extensions
 DEVELOPMENT_EXTENSIONS = {
-    'py', 'pyc', 'pyo',
-    'js', 'jsx', 'ts', 'tsx',
-    'cpp', 'c', 'h', 'hpp',
-    'java', 'class', 'jar',
-    'cs', 'csproj', 'sln',
-    'go', 'rs', 'rb', 'php',
-    'json', 'xml', 'yaml', 'yml', 'toml',
-    'md', 'rst',
-    'css', 'scss', 'sass', 'less',
-    'html', 'htm', 'vue',
-    'sql', 'db', 'sqlite',
+    'py', 'pyc', 'pyo', 'js', 'jsx', 'ts', 'tsx', 'cpp', 'c', 'h', 'hpp',
+    'java', 'class', 'jar', 'cs', 'csproj', 'sln', 'go', 'rs', 'rb', 'php',
+    'json', 'xml', 'yaml', 'yml', 'toml', 'md', 'rst', 'css', 'scss', 'sass',
+    'less', 'html', 'htm', 'vue', 'sql', 'db', 'sqlite',
 }
 
-# Configuration/Settings files
 CONFIG_EXTENSIONS = {
-    'ini', 'cfg', 'conf', 'config',
-    'properties', 'settings',
+    'ini', 'cfg', 'conf', 'config', 'properties', 'settings',
     'env', 'gitignore', 'dockerignore',
 }
 
-# Scanning Settings
+# Scanning settings
 MAX_FILES_DEFAULT = 5000
-MAX_FILE_SIZE_MB = 1024 * 10  # 10 GB max file size to consider
-SCAN_DEPTH_LIMIT = 20  # Maximum directory depth
+MAX_FILE_SIZE_MB = 1024 * 10
+SCAN_DEPTH_LIMIT = 20
+PROGRESS_UPDATE_INTERVAL = 100
 
-# Progress Update Frequency
-PROGRESS_UPDATE_INTERVAL = 100  # Update UI every N files
-
-# ML Model Settings
+# ML settings
 ML_CONFIG = {
     'random_forest': {
         'n_estimators': 100,
@@ -199,26 +111,25 @@ ML_CONFIG = {
         'contamination': 0.1,
         'n_estimators': 100,
         'random_state': 42,
+        'use_threshold_based_detection': True,
     },
     'synthetic_samples': 5000,
 }
 
-# Feature Engineering
 FEATURE_CONFIG = {
-    'size_bins': [0, 0.1, 1, 10, 100, float('inf')],  # MB
-    'access_threshold_days': 180,
-    'large_file_threshold_mb': 100,
-    'old_file_threshold_days': 365,
+    'size_bins': [0, 0.1, 1, 10, 100, float('inf')],
+    'access_threshold_days': 365,
+    'large_file_threshold_mb': 500,
+    'old_file_threshold_days': 730,
 }
 
-# Recommendation Settings
 RECOMMENDATION_CONFIG = {
-    'history_limit': 100,  # Keep last N user decisions
-    'adjustment_factor': 0.3,  # Max score adjustment
-    'min_similar_count': 3,  # Min similar files needed for adjustment
+    'history_limit': 100,
+    'adjustment_factor': 0.3,
+    'min_similar_count': 3,
 }
 
-# UI Settings
+# UI config
 UI_CONFIG = {
     'window_width': 1200,
     'window_height': 800,
@@ -228,28 +139,25 @@ UI_CONFIG = {
     'title_font_size': 16,
 }
 
-# Color Scheme
 COLORS = {
-    'delete_bg': '#ffcccc',  # Light red
-    'keep_bg': '#ccffcc',    # Light green
-    'anomaly_fg': '#ff6600', # Orange
-    'header_bg': '#2c3e50',  # Dark blue-gray
-    'header_fg': '#ffffff',  # White
-    'status_info': '#0066cc',  # Blue
-    'status_success': '#00cc00',  # Green
-    'status_error': '#cc0000',  # Red
+    'delete_bg': '#ffcccc',
+    'keep_bg': '#ccffcc',
+    'anomaly_fg': '#ff6600',
+    'header_bg': '#2c3e50',
+    'header_fg': '#ffffff',
+    'status_info': '#0066cc',
+    'status_success': '#00cc00',
+    'status_error': '#cc0000',
 }
 
-# Logging
 LOG_CONFIG = {
     'level': 'INFO',
     'format': '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     'filename': LOGS_DIR / 'file_purge.log',
-    'max_bytes': 10 * 1024 * 1024,  # 10 MB
+    'max_bytes': 10 * 1024 * 1024,
     'backup_count': 5,
 }
 
-# Export Settings
 EXPORT_CONFIG = {
     'default_format': 'csv',
     'include_predictions': True,
@@ -257,15 +165,13 @@ EXPORT_CONFIG = {
     'include_anomalies': True,
 }
 
-# Safety Settings
 SAFETY_CONFIG = {
-    'simulation_mode': True,  # Default to simulation (no actual deletion)
+    'simulation_mode': True,
     'require_confirmation': True,
-    'min_confidence_threshold': 0.7,  # Only recommend if confidence > 70%
-    'exclude_recent_days': 7,  # Don't recommend files accessed in last week
+    'min_confidence_threshold': 0.7,
+    'exclude_recent_days': 7,
 }
 
-# File Categories for Analysis - FIXED: Added new categories
 FILE_CATEGORIES = {
     'documents': DOCUMENT_EXTENSIONS,
     'images': IMAGE_EXTENSIONS,
@@ -279,55 +185,39 @@ FILE_CATEGORIES = {
     'config': CONFIG_EXTENSIONS,
 }
 
-def get_file_category(extension: str) -> str:
-    """Determine the category of a file based on its extension"""
+def get_file_category(extension):
     ext = extension.lower().lstrip('.')
-    
     for category, extensions in FILE_CATEGORIES.items():
         if ext in extensions:
             return category
-    
     return 'other'
 
-def is_system_protected(filepath: str) -> bool:
-    """Check if a file path is in a protected system location (cross-platform)"""
-    import os
-
-    # Normalize path separators for cross-platform compatibility
+def is_system_protected(filepath):
     normalized_path = filepath.replace('\\', '/').upper()
 
-    # Check full folder names (both / and \ separators)
     for folder in SYSTEM_FOLDERS:
         folder_upper = folder.upper()
-        # Check if folder is in path with separators on both sides
         if f"/{folder_upper}/" in normalized_path:
             return True
-        # Check if path starts with this folder
         if normalized_path.startswith(f"{folder_upper}/") or normalized_path.startswith(f"/{folder_upper}/"):
             return True
-        # Check for root-level paths (like /System, /Library on macOS)
         if normalized_path.startswith(f"/{folder_upper}") and folder_upper in {'SYSTEM', 'LIBRARY', 'BIN', 'SBIN', 'USR', 'VAR', 'PRIVATE', 'DEV', 'ETC'}:
             return True
-        # Special case for paths with special characters like $Recycle.Bin
         if folder_upper in normalized_path:
-            # Check if it's a directory component (not just substring)
             path_parts = normalized_path.split('/')
             if any(folder_upper in part for part in path_parts):
                 return True
 
-    # Check partial paths (normalize these too)
     for partial in SYSTEM_PATHS_PARTIAL:
         partial_normalized = partial.replace('\\', '/').upper()
         if partial_normalized in normalized_path:
             return True
 
-    # Check for application-specific folders (plugins, etc.)
     for app_path in APPLICATION_PATHS:
         if app_path.upper() in normalized_path:
             return True
 
     return False
 
-def is_disposable_extension(extension: str) -> bool:
-    """Check if an extension is considered disposable"""
+def is_disposable_extension(extension):
     return extension.lower().lstrip('.') in DISPOSABLE_EXTENSIONS

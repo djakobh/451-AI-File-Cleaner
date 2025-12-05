@@ -157,9 +157,9 @@ class FileOperationsHandler:
         trash_name = "Trash" if platform.system() == 'Darwin' else "Recycle Bin"
 
         response = messagebox.askyesnocancel(
-            "⚠️ Confirm File Deletion",
+            "Confirm File Deletion",
             f"DELETE {total_selected} files ({total_size_mb:.2f} MB)?\n\n"
-            "⚠️ WARNING: This will PERMANENTLY delete the selected files!\n\n"
+            "WARNING: This will PERMANENTLY delete the selected files!\n\n"
             f"• Click YES to move files to {trash_name} (recommended)\n"
             "• Click NO to permanently delete (cannot be recovered)\n"
             "• Click CANCEL to abort\n\n"
@@ -229,8 +229,8 @@ class FileOperationsHandler:
         if results['failed_count'] > 0:
             messagebox.showwarning(
                 "Deletion Complete with Errors",
-                f"✅ Successfully deleted: {results['success_count']} files\n"
-                f"❌ Failed to delete: {results['failed_count']} files\n\n"
+                f"Successfully deleted: {results['success_count']} files\n"
+                f"Failed to delete: {results['failed_count']} files\n\n"
                 f"Failed files:\n" + "\n".join(results['failed_files'][:10]) +
                 ("\n..." if len(results['failed_files']) > 10 else "")
             )
@@ -239,7 +239,7 @@ class FileOperationsHandler:
             trash_name = "Trash" if platform.system() == 'Darwin' else "Recycle Bin"
             deletion_type = f"moved to {trash_name}" if results['use_recycle_bin'] else "permanently deleted"
             messagebox.showinfo(
-                "✅ Deletion Successful",
+                "Deletion Successful",
                 f"Successfully {deletion_type}:\n"
                 f"• {results['success_count']} files\n"
                 f"• {results['total_size_mb']:.2f} MB freed\n\n"
